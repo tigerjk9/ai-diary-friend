@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import re
 from openai import OpenAI
+import matplotlib.pyplot as plt
 
 # OpenAI API Key 환경 변수로부터 불러오기
 api_key = os.getenv("OPENAI_API_KEY")
@@ -58,19 +59,32 @@ def analyze_diary(content):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None, None
 
-# 감정 스펙트럼 시각화 (Streamlit 내장 차트 사용)
+# 감정 스펙트럼 시각화 (Matplotlib 사용)
 def plot_emotion_spectrum(score):
-    # 데이터 생성
-    data = pd.DataFrame({
-        'Score': range(11),
-        'Value': [10] * 11
-    })
-
-    # 차트 생성
-    st.bar_chart(data.set_index('Score'), use_container_width=True, height=100)
+    fig, ax = plt.subplots(figsize=(10, 2))
+    
+    # 그래프 생성
+    ax.plot([0, score], [1, 1], color='blue', linewidth=10)
+    ax.plot([score, 10], [1, 1], color='lightgray', linewidth=10)
+    
+    # 축 설정
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 2)
+    ax.set_xticks([0, 5, 10])
+    ax.set_xticklabels(['0\n(나쁨)', '5\n(보통)', '10\n(좋음)'], rotation=0)
+    ax.tick_params(axis='y', which='both', left=False, labelleft=False)
     
     # 현재 점수 표시
-    st.markdown(f"<h2 style='text-align: center;'>현재 감정 점수: {score}</h2>", unsafe_allow_html=True)
+    ax.plot(score, 1, 'ro', markersize=15)
+    ax.text(score, 1.5, f'현재 점수: {score}', ha='center', va='bottom', fontweight='bold')
+    
+    # 제목 설정
+    plt.title('감정 스펙트럼', fontsize=16, pad=20)
+    
+    # 레이아웃 조정
+    plt.tight_layout()
+    
+    return fig
 
 # AI와 채팅 함수
 def chat_with_ai(message):
@@ -107,8 +121,9 @@ if st.button("분석하기"):
         if emotion_score is not None and feedback:
             st.subheader('감정 분석 결과')
             
-            # 감정 스펙트럼 시각화 (Streamlit 내장 차트 사용)
-            plot_emotion_spectrum(emotion_score)
+            # 감정 스펙트럼 시각화 (Matplotlib 사용)
+            fig = plot_emotion_spectrum(emotion_score)
+            st.pyplot(fig)
             
             st.subheader('AI 피드백')
             st.info(feedback)  # 피드백 한 번만 표시
