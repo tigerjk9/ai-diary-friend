@@ -61,7 +61,7 @@ with st.sidebar:
         api_key = os.getenv('OPENAI_API_KEY')
     
     # 만든이 정보 추가
-    st.markdown('<p class="creator-info">만든이: 대전장대초 김진관(닷커넥터)</p>')
+    st.markdown('<p class="creator-info">만든이: 대전장대초 김진관(닷커넥터)</p>', unsafe_allow_html=True)
 
 if api_key:
     client = OpenAI(api_key=api_key)
