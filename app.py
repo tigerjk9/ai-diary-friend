@@ -1,4 +1,5 @@
 import streamlit as st
+import altair as alt
 import pandas as pd
 import os
 import re
@@ -58,23 +59,69 @@ def analyze_diary(content):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None, None
 
-# 감정 스펙트럼 시각화 (Streamlit 내장 기능 사용)
+# 감정 스펙트럼 시각화 (Altair 사용)
 def plot_emotion_spectrum(score):
-    # 데이터 준비
-    data = pd.DataFrame({
+    # 데이터 생성 (0부터 10까지 선형 감정 스펙트럼)
+    base_data = pd.DataFrame({
         'x': range(11),
-        'y': [1] * 11,
-        'color': ['blue' if i <= score else 'lightgray' for i in range(11)]
+        'y': [0] * 11
     })
 
-    # 차트 생성
-    chart = st.bar_chart(data.set_index('x')['y'], use_container_width=True, height=100)
+    # 스펙트럼 색상 설정
+    colors = ['#F44336', '#FF9800', '#FFC107', '#FFEB3B', '#CDDC39', 
+              '#8BC34A', '#4CAF50', '#009688', '#00BCD4', '#03A9F4', '#2196F3']
+    
+    # 기본 차트 생성 (배경 스펙트럼)
+    spectrum_chart = alt.Chart(base_data).mark_bar(size=30).encode(
+        x=alt.X('x:Q', scale=alt.Scale(domain=[0, 10]), axis=alt.Axis(title='감정 점수', values=list(range(11)))),
+        y=alt.value(0),
+        color=alt.Color('x:Q', scale=alt.Scale(domain=[0, 10], range=colors), legend=None)
+    )
 
-    # 현재 점수 표시
-    st.markdown(f"<h3 style='text-align: center;'>현재 감정 점수: {score}</h3>", unsafe_allow_html=True)
+    # 현재 점수 강조 표시
+    score_marker = alt.Chart(pd.DataFrame({'x': [score], 'y': [0]})).mark_rule(
+        color='black',
+        strokeWidth=5
+    ).encode(
+        x='x:Q',
+        y='y:Q'
+    )
 
-    # x축 레이블 추가
-    st.markdown("<p style='text-align: center;'><span style='float: left;'>0 (나쁨)</span><span style='display: inline-block; width: 100%; text-align: center;'>5 (보통)</span><span style='float: right;'>10 (좋음)</span></p>", unsafe_allow_html=True)
+    # 점수 라벨
+    score_label = alt.Chart(pd.DataFrame({'x': [score], 'y': [0], 'label': [str(score)]})).mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-10,
+        fontSize=18,
+        color='black'
+    ).encode(
+        x='x:Q',
+        y=alt.value(0),  # y값 고정
+        text='label:N'
+    )
+
+    # 라벨 (감정 스펙트럼의 시작과 끝을 설명)
+    label_data = pd.DataFrame({
+        'x': [0, 10],
+        'y': [0, 0],
+        'label': ['매우 나쁨', '매우 좋음']
+    })
+
+    labels = alt.Chart(label_data).mark_text(
+        align='center',
+        baseline='top',
+        dy=20,
+        fontSize=12
+    ).encode(
+        x='x',
+        y='y',
+        text='label'
+    )
+
+    # 차트 조합
+    final_chart = spectrum_chart + score_marker + score_label + labels
+
+    return final_chart
 
 # AI와 채팅 함수
 def chat_with_ai(message):
@@ -110,9 +157,11 @@ if st.button("분석하기"):
         
         if emotion_score is not None and feedback:
             st.subheader('감정 분석 결과')
-            
-            # 감정 스펙트럼 시각화
-            plot_emotion_spectrum(emotion_score)
+            st.write(f"감정 점수: {emotion_score}")
+
+            # 감정 스펙트럼 시각화 (Altair 사용)
+            chart = plot_emotion_spectrum(emotion_score)
+            st.altair_chart(chart, use_container_width=True)
             
             st.subheader('AI 피드백')
             st.info(feedback)  # 피드백 한 번만 표시
