@@ -1,22 +1,28 @@
 import streamlit as st
+import matplotlib.pyplot as plt
+from matplotlib import font_manager, rc
 from openai import OpenAI
+import os
 import re
 
-# Streamlit Secrets에서 API 키 가져오기
-api_key = st.secrets.get("OPENAI_API_KEY")
+# OpenAI API Key 환경 변수로부터 불러오기
+api_key = os.getenv("OPENAI_API_KEY")
 
+# OpenAI 클라이언트 초기화
 if api_key:
     client = OpenAI(api_key=api_key)
 else:
-    st.error("OpenAI API 키가 설정되지 않았습니다.")
-    st.stop()
+    st.error("OpenAI API 키가 필요합니다. 환경 변수에 API 키를 설정해주세요.")
 
 # 세션 상태 초기화
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
 if 'feedback' not in st.session_state:
-    st.session_state.feedback = ""
+    st.session_state.feedback = ""  # 피드백을 저장하기 위한 변수
+
+# 한글 폰트 설정 (Streamlit Cloud에서는 시스템에 따라 폰트를 로드하지 않아도 됨)
+plt.rcParams['font.sans-serif'] = ['Arial']  # Arial 사용, 필요 시 다른 폰트 설정 가능
 
 # 감정 분석 함수
 def analyze_diary(content):
@@ -30,13 +36,15 @@ def analyze_diary(content):
         )
         emotion_text = response.choices[0].message.content.strip()
 
+        # 감정 점수만 추출 (정규 표현식 사용)
         match = re.search(r'\d+', emotion_text)
         if match:
-            emotion_score = int(match.group())
+            emotion_score = int(match.group())  # 첫 번째로 발견된 숫자를 추출
         else:
             st.error("감정 점수를 추출할 수 없습니다.")
             return None, None
 
+        # AI 피드백 생성
         feedback_response = client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -46,12 +54,30 @@ def analyze_diary(content):
         )
         feedback = feedback_response.choices[0].message.content.strip()
 
+        # 피드백을 세션 상태에 저장하여 유지
         st.session_state.feedback = feedback
 
         return emotion_score, feedback
     except Exception as e:
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None, None
+
+# 감정 스펙트럼 시각화
+def plot_emotion_spectrum(score):
+    fig, ax = plt.subplots(figsize=(8, 2))
+
+    # 감정 점수를 가로 수직선으로 표시
+    ax.axhline(y=0.5, xmin=0, xmax=score / 10, color='#4CAF50' if score > 6 else '#F44336' if score < 4 else '#FFC107', linewidth=10)
+
+    # 축 설정 (0: 나쁨, 10: 좋음)
+    ax.set_xlim(0, 10)
+    ax.set_xticks([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    ax.set_xticklabels(['0 (나쁨)', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10 (좋음)'])
+    ax.set_yticks([])  # y축 제거
+    ax.set_xlabel('감정 점수 (0에서 10)')
+    ax.set_title('감정 스펙트럼')
+
+    st.pyplot(fig)
 
 # AI와 채팅 함수
 def chat_with_ai(message):
@@ -79,23 +105,32 @@ AI 일기 친구는 여러분의 일기를 분석하고 감정을 이해하여 �
 
 diary_content = st.text_area("오늘의 일기를 작성해주세요:", height=200)
 
+# 분석하기 버튼
 if st.button("분석하기"):
-    with st.spinner('AI가 열심히 분석 중이에요... 🤔'):
-        emotion_score, feedback = analyze_diary(diary_content)
-    
-    if emotion_score is not None and feedback:
-        st.subheader('감정 분석 결과')
-        st.write(f"감정 점수: {emotion_score}/10")
+    if api_key:
+        with st.spinner('AI가 열심히 분석 중이에요... 🤔'):
+            emotion_score, feedback = analyze_diary(diary_content)
         
-        st.subheader('AI 피드백')
-        st.info(feedback)
-        
-        st.session_state.chat_history.append(("AI", feedback))
+        if emotion_score and feedback:
+            st.subheader('감정 분석 결과')
+            st.write(f"감정 점수: {emotion_score}")
 
+            # 감정 스펙트럼 시각화
+            plot_emotion_spectrum(emotion_score)
+            
+            st.subheader('AI 피드백')
+            st.info(feedback)  # 피드백 한 번만 표시
+            
+            st.session_state.chat_history.append(("AI", feedback))
+    else:
+        st.error("OpenAI API 키가 필요합니다. 입력 후 다시 시도하세요.")
+
+# 채팅 UI - 사용자 입력 및 대화 내용 표시
 st.subheader('AI와 이어서 대화하기')
 
-chat_container = st.container()
+chat_container = st.container()  # 대화 내용을 담을 컨테이너
 
+# 이전 대화 내용 출력
 with chat_container:
     for role, message in st.session_state.chat_history:
         if role == "User":
@@ -103,13 +138,15 @@ with chat_container:
         else:
             st.markdown(f"**AI:** {message}")
 
+# 채팅 입력 필드 및 콜백 함수
 def submit_chat():
     user_message = st.session_state.chat_input
     if user_message:
-        st.session_state.chat_history.append(("User", user_message))
+        st.session_state.chat_history.append(("User", user_message))  # 사용자의 메시지를 기록
         ai_response = chat_with_ai(user_message)
         if ai_response:
-            st.session_state.chat_history.append(("AI", ai_response))
-        st.session_state.chat_input = ""
+            st.session_state.chat_history.append(("AI", ai_response))  # AI의 응답을 기록
+        st.session_state.chat_input = ""  # 입력 필드를 비움
 
-st.text_input("메시지 입력 후, Enter키를 누르세요", key="chat_input", on_change=submit_chat)
+# 채팅 입력 필드
+st.text_input("메시지 입력 후, Enter키를 누르세요", key="chat_input", placeholder="메시지 입력 후, Enter키를 누르세요", on_change=submit_chat)
