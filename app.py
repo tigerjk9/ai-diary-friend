@@ -61,65 +61,65 @@ def analyze_diary(content):
 
 # 감정 스펙트럼 시각화 (Altair 사용)
 def plot_emotion_spectrum(score):
-    # 기본 데이터 생성 (0부터 10까지의 선형 감정 스펙트럼)
+    # 기본 데이터 생성 (0부터 10까지의 감정 스펙트럼)
     base_data = pd.DataFrame({
-        'x': range(11),
-        'y': [0] * 11
+        'score': range(11),
+        'value': [1] * 11
     })
 
-    # 스펙트럼 색상 설정 (0~10 구간을 색상으로 표현)
+    # 스펙트럼 색상 설정
     colors = ['#F44336', '#FF9800', '#FFC107', '#FFEB3B', '#CDDC39', 
               '#8BC34A', '#4CAF50', '#009688', '#00BCD4', '#03A9F4', '#2196F3']
-    
-    # 기본 차트 생성 (배경 스펙트럼)
-    spectrum_chart = alt.Chart(base_data).mark_bar(size=30).encode(
-        x=alt.X('x:Q', scale=alt.Scale(domain=[0, 10]), axis=alt.Axis(title='감정 점수', values=list(range(11)))),
-        y=alt.value(0),
-        color=alt.Color('x:Q', scale=alt.Scale(domain=[0, 10], range=colors), legend=None)
+
+    # 기본 차트 생성 (가로 막대 그래프)
+    base_chart = alt.Chart(base_data).mark_bar().encode(
+        x=alt.X('value:Q', title=None, axis=None),
+        y=alt.Y('score:O', title=None, axis=None),
+        color=alt.Color('score:O', scale=alt.Scale(domain=list(range(11)), range=colors), legend=None)
     )
 
-    # 현재 점수 강조 표시 (검정색 선으로 감정 점수 표시)
-    score_marker = alt.Chart(pd.DataFrame({'x': [score], 'y': [0]})).mark_rule(
-        color='black',
-        strokeWidth=5
-    ).encode(
-        x='x:Q',
-        y='y:Q'
+    # 현재 점수 강조 표시
+    highlight = pd.DataFrame({'score': [score], 'value': [1]})
+    highlight_chart = alt.Chart(highlight).mark_bar(color='black', opacity=0.3).encode(
+        x=alt.X('value:Q'),
+        y=alt.Y('score:O')
     )
 
-    # 현재 점수 라벨 표시 (현재 감정 점수 텍스트)
-    score_label = alt.Chart(pd.DataFrame({'x': [score], 'y': [0], 'label': [str(score)]})).mark_text(
-        align='center',
-        baseline='bottom',
-        dy=-10,
-        fontSize=18,
-        color='black'
+    # 점수 라벨 추가
+    text_chart = alt.Chart(pd.DataFrame({'score': [score], 'label': [f'현재 감정 점수: {score}']})).mark_text(
+        align='left',
+        baseline='middle',
+        dx=5,
+        fontSize=14
     ).encode(
-        x='x:Q',
-        y=alt.value(0),  # y값을 고정하여 가로 방향에만 영향을 줌
+        x=alt.value(0),
+        y=alt.Y('score:O'),
         text='label:N'
     )
 
-    # 스펙트럼 라벨 (감정 스펙트럼의 양 끝 설명 - 매우 나쁨과 매우 좋음)
-    label_data = pd.DataFrame({
-        'x': [0, 10],
-        'y': [0, 0],
-        'label': ['매우 나쁨', '매우 좋음']
+    # 스펙트럼 범위 설명 라벨
+    range_labels = pd.DataFrame({
+        'score': [0, 10],
+        'label': ['매우 나쁨', '매우 좋음'],
+        'x': [-0.1, 1.1]  # x 위치 조정
     })
-
-    labels = alt.Chart(label_data).mark_text(
+    range_text = alt.Chart(range_labels).mark_text(
         align='center',
-        baseline='top',
-        dy=20,
+        baseline='middle',
         fontSize=12
     ).encode(
-        x='x',
-        y='y',
-        text='label'
+        x=alt.X('x:Q', scale=alt.Scale(domain=[-0.2, 1.2])),
+        y=alt.Y('score:O'),
+        text='label:N'
     )
 
-    # 모든 차트 조합
-    final_chart = spectrum_chart + score_marker + score_label + labels
+    # 차트 조합
+    final_chart = (base_chart + highlight_chart + text_chart + range_text).properties(
+        width=600,
+        height=400
+    ).configure_view(
+        strokeWidth=0
+    )
 
     return final_chart
 
@@ -157,7 +157,6 @@ if st.button("분석하기"):
         
         if emotion_score is not None and feedback:
             st.subheader('감정 분석 결과')
-            st.write(f"감정 점수: {emotion_score}")
 
             # 감정 스펙트럼 시각화 (Altair 사용)
             chart = plot_emotion_spectrum(emotion_score)
