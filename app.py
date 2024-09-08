@@ -1,6 +1,6 @@
 import streamlit as st
-import matplotlib.pyplot as plt
-from matplotlib import font_manager, rc
+import altair as alt
+import pandas as pd
 import os
 import re
 from openai import OpenAI
@@ -20,30 +20,6 @@ if 'chat_history' not in st.session_state:
 
 if 'feedback' not in st.session_state:
     st.session_state.feedback = ""  # 피드백을 저장하기 위한 변수
-
-# 한글 폰트 설정
-def set_korean_font():
-    try:
-        # Streamlit Cloud에서 사용 가능한 폰트 목록
-        available_fonts = ['NanumGothic', 'NanumMyeongjo', 'NanumBarunGothic', 'NanumSquare', 'NotoSansCJK', 'NotoSerifCJK']
-        
-        for font in available_fonts:
-            try:
-                font_path = font_manager.findfont(font_manager.FontProperties(family=font))
-                if font_path:
-                    plt.rcParams['font.family'] = font
-                    plt.rcParams['axes.unicode_minus'] = False
-                    return
-            except:
-                continue
-        
-        # 사용 가능한 폰트가 없으면 기본 Sans-Serif 폰트 사용
-        plt.rcParams['font.family'] = 'sans-serif'
-        plt.rcParams['axes.unicode_minus'] = False
-    except Exception as e:
-        st.error(f"폰트를 설정하는 과정에서 문제가 발생했습니다: {str(e)}")
-
-set_korean_font()  # 한글 폰트 설정
 
 # 감정 분석 함수
 def analyze_diary(content):
@@ -83,22 +59,60 @@ def analyze_diary(content):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None, None
 
-# 감정 스펙트럼 시각화
+# 감정 스펙트럼 시각화 (Altair 사용)
 def plot_emotion_spectrum(score):
-    fig, ax = plt.subplots(figsize=(8, 2))
+    # 데이터 생성
+    data = pd.DataFrame({
+        'x': [0, score, 10],
+        'y': [0, 0, 0],
+        'color': ['#F44336', '#4CAF50' if score > 5 else '#FFC107', '#4CAF50']
+    })
 
-    # 감정 점수를 가로 수직선으로 표시
-    ax.axhline(y=0.5, xmin=0, xmax=score / 10, color='#4CAF50' if score > 6 else '#F44336' if score < 4 else '#FFC107', linewidth=10)
+    # 차트 생성
+    chart = alt.Chart(data).mark_line(
+        strokeWidth=10
+    ).encode(
+        x=alt.X('x', scale=alt.Scale(domain=[0, 10]), axis=alt.Axis(title='감정 점수', values=[0, 2, 4, 6, 8, 10])),
+        y='y',
+        color=alt.Color('color', scale=None)
+    ).properties(
+        width=600,
+        height=100,
+        title='감정 스펙트럼'
+    )
 
-    # 축 설정 (0: 나쁨, 10: 좋음)
-    ax.set_xlim(0, 10)
-    ax.set_xticks([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-    ax.set_xticklabels(['0 (나쁨)', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10 (좋음)'])
-    ax.set_yticks([])  # y축 제거
-    ax.set_xlabel('감정 점수 (0에서 10)')
-    ax.set_title('감정 스펙트럼')
+    # 라벨 추가
+    label_data = pd.DataFrame({
+        'x': [0, 10],
+        'y': [0, 0],
+        'label': ['나쁨', '좋음']
+    })
 
-    st.pyplot(fig)
+    labels = alt.Chart(label_data).mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-10
+    ).encode(
+        x='x',
+        y='y',
+        text='label'
+    )
+
+    # 점수 표시
+    score_label = alt.Chart(pd.DataFrame({'x': [score], 'y': [0], 'score': [score]})).mark_text(
+        align='center',
+        baseline='top',
+        dy=10
+    ).encode(
+        x='x',
+        y='y',
+        text='score:Q'
+    )
+
+    # 차트 조합
+    final_chart = chart + labels + score_label
+
+    return final_chart
 
 # AI와 채팅 함수
 def chat_with_ai(message):
@@ -136,8 +150,9 @@ if st.button("분석하기"):
             st.subheader('감정 분석 결과')
             st.write(f"감정 점수: {emotion_score}")
 
-            # 감정 스펙트럼 시각화
-            plot_emotion_spectrum(emotion_score)
+            # 감정 스펙트럼 시각화 (Altair 사용)
+            chart = plot_emotion_spectrum(emotion_score)
+            st.altair_chart(chart, use_container_width=True)
             
             st.subheader('AI 피드백')
             st.info(feedback)  # 피드백 한 번만 표시
