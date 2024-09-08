@@ -59,81 +59,52 @@ def analyze_diary(content):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None, None
 
-# 감정 스펙트럼 시각화 (Altair 사용) - 가로 막대 버전
+# 감정 스펙트럼 시각화 (Altair 사용) - 간소화된 버전
 def plot_emotion_spectrum(score):
     # 기본 데이터 생성
-    base_data = pd.DataFrame({
-        'x': range(11),
-        'y': [0] * 11
+    data = pd.DataFrame({
+        'Score': range(11),
+        'Value': [1] * 11,
+        'Category': ['스펙트럼'] * 11
     })
 
-    # 스펙트럼 색상 데이터
-    color_scale = alt.Scale(
-        domain=[0, 5, 10],
-        range=['#F44336', '#FFC107', '#4CAF50']
-    )
-
-    # 기본 스펙트럼 차트 (가로 막대)
-    base_chart = alt.Chart(base_data).mark_bar(
-        height=30,
-        cornerRadius=5
-    ).encode(
-        x=alt.X('x:Q', scale=alt.Scale(domain=[0, 10]), axis=alt.Axis(title='감정 점수', values=list(range(11)))),
-        x2=alt.X2('x2:Q', scale=alt.Scale(domain=[0, 10])),
-        color=alt.Color('x:Q', scale=color_scale, legend=None)
-    ).transform_calculate(
-        x2='datum.x + 1'
-    )
-
-    # 현재 점수 표시
-    score_data = pd.DataFrame({'x': [score], 'y': [0]})
-    score_point = alt.Chart(score_data).mark_rule(
-        size=5,
-        color='black'
-    ).encode(
-        x='x:Q',
-        y=alt.value(0),
-        y2=alt.value(30)
-    )
-
-    # 점수 텍스트 표시 (겹치지 않도록 조정)
-    text_y = 40 if score > 5 else -10
-    score_text = alt.Chart(score_data).mark_text(
-        align='center',
-        baseline='middle',
-        fontSize=20,
-        fontWeight='bold',
-        dy=text_y
-    ).encode(
-        x='x:Q',
-        text=alt.Text('x:Q', format='.1f')
-    )
-
-    # 라벨 추가
-    label_data = pd.DataFrame({
-        'x': [0, 5, 10],
-        'y': [0, 0, 0],
-        'label': ['나쁨', '보통', '좋음']
+    # 현재 점수 데이터
+    score_data = pd.DataFrame({
+        'Score': [score],
+        'Value': [1],
+        'Category': ['현재 점수']
     })
 
-    labels = alt.Chart(label_data).mark_text(
-        align='center',
-        baseline='top',
-        dy=40,
-        fontSize=14
-    ).encode(
-        x='x:Q',
-        text='label'
+    # 차트 생성
+    base = alt.Chart(data).mark_bar().encode(
+        x='Score:Q',
+        y='Value:Q',
+        color=alt.Color('Score:Q', scale=alt.Scale(domain=[0, 10], range=['#F44336', '#4CAF50']))
     )
 
-    # 차트 조합
-    final_chart = (base_chart + score_point + score_text + labels).properties(
+    score_mark = alt.Chart(score_data).mark_rule(color='black').encode(
+        x='Score:Q'
+    )
+
+    text = alt.Chart(score_data).mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-10,
+        fontSize=20
+    ).encode(
+        x='Score:Q',
+        text='Score:Q'
+    )
+
+    chart = (base + score_mark + text).properties(
         width=600,
         height=100,
         title='감정 스펙트럼'
+    ).configure_axis(
+        grid=False
     )
 
-    return final_chart
+    return chart
 
 # AI와 채팅 함수
 def chat_with_ai(message):
