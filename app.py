@@ -171,7 +171,7 @@ AI 일기 친구는 여러분의 일기를 분석하고 감정을 이해하여 �
 
 diary_content = st.text_area("오늘의 일기를 작성해주세요:", height=200)
 
-# 분석하기 버튼
+# 분석하기 버튼 복구
 if st.button("분석하기"):
     if api_key:
         with st.spinner('AI가 열심히 분석 중이에요... 🤔'):
