@@ -1,5 +1,4 @@
 import streamlit as st
-import altair as alt
 import pandas as pd
 import os
 import re
@@ -59,52 +58,19 @@ def analyze_diary(content):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None, None
 
-# 감정 스펙트럼 시각화 (Altair 사용) - 간소화된 버전
+# 감정 스펙트럼 시각화 (Streamlit 내장 차트 사용)
 def plot_emotion_spectrum(score):
-    # 기본 데이터 생성
+    # 데이터 생성
     data = pd.DataFrame({
         'Score': range(11),
-        'Value': [1] * 11,
-        'Category': ['스펙트럼'] * 11
-    })
-
-    # 현재 점수 데이터
-    score_data = pd.DataFrame({
-        'Score': [score],
-        'Value': [1],
-        'Category': ['현재 점수']
+        'Value': [10] * 11
     })
 
     # 차트 생성
-    base = alt.Chart(data).mark_bar().encode(
-        x='Score:Q',
-        y='Value:Q',
-        color=alt.Color('Score:Q', scale=alt.Scale(domain=[0, 10], range=['#F44336', '#4CAF50']))
-    )
-
-    score_mark = alt.Chart(score_data).mark_rule(color='black').encode(
-        x='Score:Q'
-    )
-
-    text = alt.Chart(score_data).mark_text(
-        align='center',
-        baseline='bottom',
-        dy=-10,
-        fontSize=20
-    ).encode(
-        x='Score:Q',
-        text='Score:Q'
-    )
-
-    chart = (base + score_mark + text).properties(
-        width=600,
-        height=100,
-        title='감정 스펙트럼'
-    ).configure_axis(
-        grid=False
-    )
-
-    return chart
+    st.bar_chart(data.set_index('Score'), use_container_width=True, height=100)
+    
+    # 현재 점수 표시
+    st.markdown(f"<h2 style='text-align: center;'>현재 감정 점수: {score}</h2>", unsafe_allow_html=True)
 
 # AI와 채팅 함수
 def chat_with_ai(message):
@@ -140,11 +106,9 @@ if st.button("분석하기"):
         
         if emotion_score is not None and feedback:
             st.subheader('감정 분석 결과')
-            st.write(f"감정 점수: {emotion_score}")
-
-            # 감정 스펙트럼 시각화 (Altair 사용)
-            chart = plot_emotion_spectrum(emotion_score)
-            st.altair_chart(chart, use_container_width=True)
+            
+            # 감정 스펙트럼 시각화 (Streamlit 내장 차트 사용)
+            plot_emotion_spectrum(emotion_score)
             
             st.subheader('AI 피드백')
             st.info(feedback)  # 피드백 한 번만 표시
