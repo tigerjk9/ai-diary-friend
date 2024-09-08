@@ -3,7 +3,6 @@ import pandas as pd
 import os
 import re
 from openai import OpenAI
-import matplotlib.pyplot as plt
 
 # OpenAI API Key 환경 변수로부터 불러오기
 api_key = os.getenv("OPENAI_API_KEY")
@@ -59,32 +58,23 @@ def analyze_diary(content):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None, None
 
-# 감정 스펙트럼 시각화 (Matplotlib 사용)
+# 감정 스펙트럼 시각화 (Streamlit 내장 기능 사용)
 def plot_emotion_spectrum(score):
-    fig, ax = plt.subplots(figsize=(10, 2))
-    
-    # 그래프 생성
-    ax.plot([0, score], [1, 1], color='blue', linewidth=10)
-    ax.plot([score, 10], [1, 1], color='lightgray', linewidth=10)
-    
-    # 축 설정
-    ax.set_xlim(0, 10)
-    ax.set_ylim(0, 2)
-    ax.set_xticks([0, 5, 10])
-    ax.set_xticklabels(['0\n(나쁨)', '5\n(보통)', '10\n(좋음)'], rotation=0)
-    ax.tick_params(axis='y', which='both', left=False, labelleft=False)
-    
+    # 데이터 준비
+    data = pd.DataFrame({
+        'x': range(11),
+        'y': [1] * 11,
+        'color': ['blue' if i <= score else 'lightgray' for i in range(11)]
+    })
+
+    # 차트 생성
+    chart = st.bar_chart(data.set_index('x')['y'], use_container_width=True, height=100)
+
     # 현재 점수 표시
-    ax.plot(score, 1, 'ro', markersize=15)
-    ax.text(score, 1.5, f'현재 점수: {score}', ha='center', va='bottom', fontweight='bold')
-    
-    # 제목 설정
-    plt.title('감정 스펙트럼', fontsize=16, pad=20)
-    
-    # 레이아웃 조정
-    plt.tight_layout()
-    
-    return fig
+    st.markdown(f"<h3 style='text-align: center;'>현재 감정 점수: {score}</h3>", unsafe_allow_html=True)
+
+    # x축 레이블 추가
+    st.markdown("<p style='text-align: center;'><span style='float: left;'>0 (나쁨)</span><span style='display: inline-block; width: 100%; text-align: center;'>5 (보통)</span><span style='float: right;'>10 (좋음)</span></p>", unsafe_allow_html=True)
 
 # AI와 채팅 함수
 def chat_with_ai(message):
@@ -121,9 +111,8 @@ if st.button("분석하기"):
         if emotion_score is not None and feedback:
             st.subheader('감정 분석 결과')
             
-            # 감정 스펙트럼 시각화 (Matplotlib 사용)
-            fig = plot_emotion_spectrum(emotion_score)
-            st.pyplot(fig)
+            # 감정 스펙트럼 시각화
+            plot_emotion_spectrum(emotion_score)
             
             st.subheader('AI 피드백')
             st.info(feedback)  # 피드백 한 번만 표시
