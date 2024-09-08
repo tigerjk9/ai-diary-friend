@@ -1,18 +1,42 @@
 import streamlit as st
 import altair as alt
 import pandas as pd
+from openai import OpenAI
 import os
 import re
-from openai import OpenAI
+from dotenv import load_dotenv
 
-# OpenAI API Key 환경 변수로부터 불러오기
-api_key = os.getenv("OPENAI_API_KEY")
+# .env 파일에서 환경 변수 로드
+load_dotenv()
 
 # OpenAI 클라이언트 초기화
+api_key = None
+
+# Streamlit 페이지 설정
+st.set_page_config(page_title="AI 일기 친구", page_icon="📔", layout="wide")
+
+# CSS를 사용하여 한글 폰트 적용
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&display=swap');
+    html, body, [class*="css"] {
+        font-family: 'Nanum Gothic', sans-serif;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# OpenAI 키 입력받기 (좌측 상단으로 이동하기 위해 사이드바 사용)
+with st.sidebar:
+    user_api_key = st.text_input("OpenAI 키 값을 입력하세요. 시험 삼아 테스트하려면 빈칸으로 두세요.")
+    if user_api_key:
+        api_key = user_api_key
+    else:
+        api_key = os.getenv('OPENAI_API_KEY')
+
 if api_key:
     client = OpenAI(api_key=api_key)
 else:
-    st.error("OpenAI API 키가 필요합니다. 환경 변수에 API 키를 설정해주세요.")
+    st.warning("OpenAI API 키가 필요합니다. 키를 입력하거나 테스트 모드를 사용하세요.")
 
 # 세션 상태 초기화
 if 'chat_history' not in st.session_state:
@@ -59,68 +83,41 @@ def analyze_diary(content):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None, None
 
-# 감정 스펙트럼 시각화 (Altair 사용)
+# 감정 스펙트럼 시각화 (Altair 사용, 영어로 표시)
 def plot_emotion_spectrum(score):
-    # 기본 데이터 생성 (0부터 10까지의 감정 스펙트럼)
-    base_data = pd.DataFrame({
-        'score': range(11),
-        'value': [1] * 11
-    })
-
-    # 스펙트럼 색상 설정
-    colors = ['#F44336', '#FF9800', '#FFC107', '#FFEB3B', '#CDDC39', 
-              '#8BC34A', '#4CAF50', '#009688', '#00BCD4', '#03A9F4', '#2196F3']
-
-    # 기본 차트 생성 (가로 막대 그래프)
-    base_chart = alt.Chart(base_data).mark_bar().encode(
-        x=alt.X('value:Q', title=None, axis=None),
-        y=alt.Y('score:O', title=None, axis=None),
-        color=alt.Color('score:O', scale=alt.Scale(domain=list(range(11)), range=colors), legend=None)
-    )
-
-    # 현재 점수 강조 표시
-    highlight = pd.DataFrame({'score': [score], 'value': [1]})
-    highlight_chart = alt.Chart(highlight).mark_bar(color='black', opacity=0.3).encode(
-        x=alt.X('value:Q'),
-        y=alt.Y('score:O')
-    )
-
-    # 점수 라벨 추가
-    text_chart = alt.Chart(pd.DataFrame({'score': [score], 'label': [f'현재 감정 점수: {score}']})).mark_text(
-        align='left',
-        baseline='middle',
-        dx=5,
-        fontSize=14
+    # 데이터 프레임 생성
+    df = pd.DataFrame({'x': [0, score, 10], 'y': [0, 0, 0]})
+    
+    # 색상 결정
+    color = '#4CAF50' if score > 6 else '#F44336' if score < 4 else '#FFC107'
+    
+    # Altair 차트 생성 (영어로 표시)
+    chart = alt.Chart(df).mark_line(
+        color=color,
+        strokeWidth=10
     ).encode(
-        x=alt.value(0),
-        y=alt.Y('score:O'),
-        text='label:N'
-    )
-
-    # 스펙트럼 범위 설명 라벨
-    range_labels = pd.DataFrame({
-        'score': [0, 10],
-        'label': ['매우 나쁨', '매우 좋음'],
-        'x': [-0.1, 1.1]  # x 위치 조정
-    })
-    range_text = alt.Chart(range_labels).mark_text(
-        align='center',
-        baseline='middle',
-        fontSize=12
-    ).encode(
-        x=alt.X('x:Q', scale=alt.Scale(domain=[-0.2, 1.2])),
-        y=alt.Y('score:O'),
-        text='label:N'
-    )
-
-    # 차트 조합
-    final_chart = (base_chart + highlight_chart + text_chart + range_text).properties(
+        x=alt.X('x', scale=alt.Scale(domain=[0, 10]), axis=alt.Axis(title='Emotion Score (0 to 10)', values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
+        y=alt.Y('y', axis=None)
+    ).properties(
         width=600,
-        height=400
-    ).configure_view(
-        strokeWidth=0
+        height=100,
+        title='Emotion Spectrum'
     )
-
+    
+    # 점수 표시
+    text = alt.Chart(pd.DataFrame({'x': [score], 'y': [0], 'text': [f'{score}']})).mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5
+    ).encode(
+        x='x',
+        y='y',
+        text='text'
+    )
+    
+    # 차트와 텍스트 결합
+    final_chart = chart + text
+    
     return final_chart
 
 # AI와 채팅 함수
@@ -138,7 +135,7 @@ def chat_with_ai(message):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None
 
-# UI 구성
+# UI
 st.title('AI 일기 친구 🤖📔')
 
 st.write("""
@@ -157,8 +154,9 @@ if st.button("분석하기"):
         
         if emotion_score is not None and feedback:
             st.subheader('감정 분석 결과')
+            st.write(f"감정 점수: {emotion_score}")
 
-            # 감정 스펙트럼 시각화 (Altair 사용)
+            # 감정 스펙트럼 시각화 (Altair 사용, 영어로 표시)
             chart = plot_emotion_spectrum(emotion_score)
             st.altair_chart(chart, use_container_width=True)
             
