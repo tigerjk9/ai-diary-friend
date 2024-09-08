@@ -4,18 +4,11 @@ import pandas as pd
 from openai import OpenAI
 import os
 import re
-from dotenv import load_dotenv
-
-# .env 파일에서 환경 변수 로드
-load_dotenv()
-
-# OpenAI 클라이언트 초기화
-api_key = None
 
 # Streamlit 페이지 설정
 st.set_page_config(page_title="AI 일기 친구", page_icon="📔", layout="wide")
 
-# CSS를 사용하여 한글 폰트, 채팅 UI 스타일, 그리고 만든이 정보 스타일 적용
+# CSS 스타일 정의
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&display=swap');
@@ -45,12 +38,25 @@ st.markdown("""
         font-family: 'Pretendard', sans-serif;
         font-weight: 600;
         font-size: 0.9em;
-        color: #4a4a4a;
         margin-top: 20px;
         text-align: center;
     }
+    /* 다크 모드 감지 및 색상 변경 */
+    @media (prefers-color-scheme: dark) {
+        .creator-info {
+            color: #E0E0E0;
+        }
+    }
+    @media (prefers-color-scheme: light) {
+        .creator-info {
+            color: #4a4a4a;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# OpenAI 클라이언트 초기화
+api_key = None
 
 # OpenAI 키 입력받기 (사이드바 사용)
 with st.sidebar:
@@ -58,7 +64,7 @@ with st.sidebar:
     if user_api_key:
         api_key = user_api_key
     else:
-        api_key = os.getenv('OPENAI_API_KEY')
+        api_key = st.secrets["openai_api_key"]
     
     # 만든이 정보 추가
     st.markdown('<p class="creator-info">만든이: 대전장대초 김진관(닷커넥터)</p>', unsafe_allow_html=True)
