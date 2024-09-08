@@ -15,12 +15,35 @@ api_key = None
 # Streamlit 페이지 설정
 st.set_page_config(page_title="AI 일기 친구", page_icon="📔", layout="wide")
 
-# CSS를 사용하여 한글 폰트 적용
+# CSS를 사용하여 한글 폰트 및 채팅 UI 스타일 적용
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&display=swap');
     html, body, [class*="css"] {
         font-family: 'Nanum Gothic', sans-serif;
+    }
+    .chat-message {
+        padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; display: flex
+    }
+    .chat-message.user {
+        background-color: #2b313e
+    }
+    .chat-message.bot {
+        background-color: #475063
+    }
+    .chat-message .avatar {
+      width: 20%;
+    }
+    .chat-message .avatar img {
+      max-width: 78px;
+      max-height: 78px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .chat-message .message {
+      width: 80%;
+      padding: 0 1.5rem;
+      color: #fff;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -44,6 +67,9 @@ if 'chat_history' not in st.session_state:
 
 if 'feedback' not in st.session_state:
     st.session_state.feedback = ""  # 피드백을 저장하기 위한 변수
+
+if 'emotion_score' not in st.session_state:
+    st.session_state.emotion_score = None
 
 # 감정 분석 함수
 def analyze_diary(content):
@@ -77,6 +103,7 @@ def analyze_diary(content):
 
         # 피드백을 세션 상태에 저장하여 유지
         st.session_state.feedback = feedback
+        st.session_state.emotion_score = emotion_score
 
         return emotion_score, feedback
     except Exception as e:
@@ -89,7 +116,7 @@ def plot_emotion_spectrum(score):
     df = pd.DataFrame({'x': [0, score, 10], 'y': [0, 0, 0]})
     
     # 색상 결정
-    color = '#4CAF50' if score > 6 else '#F44336' if score < 4 else '#FFC107'
+    color = '#4CAF50' if score > 7 else '#FFC107' if score > 3 else '#F44336'
     
     # Altair 차트 생성 (영어로 표시)
     chart = alt.Chart(df).mark_line(
@@ -119,6 +146,15 @@ def plot_emotion_spectrum(score):
     final_chart = chart + text
     
     return final_chart
+
+# 감정 점수에 따른 동그라미 색상 결정
+def get_emotion_circle(score):
+    if score <= 3:
+        return "🔴"  # 빨간 동그라미
+    elif score <= 7:
+        return "🟡"  # 노란 동그라미
+    else:
+        return "🟢"  # 초록 동그라미
 
 # AI와 채팅 함수
 def chat_with_ai(message):
@@ -153,32 +189,36 @@ if st.button("분석하기"):
             emotion_score, feedback = analyze_diary(diary_content)
         
         if emotion_score is not None and feedback:
-            st.subheader('감정 분석 결과')
-            st.write(f"감정 점수: {emotion_score}")
-
-            # 감정 스펙트럼 시각화 (Altair 사용, 영어로 표시)
-            chart = plot_emotion_spectrum(emotion_score)
-            st.altair_chart(chart, use_container_width=True)
-            
-            st.subheader('AI 피드백')
-            st.info(feedback)  # 피드백 한 번만 표시
-            
+            st.session_state.chat_history = []  # 채팅 기록 초기화
             st.session_state.chat_history.append(("AI", feedback))
     else:
         st.error("OpenAI API 키가 필요합니다. 입력 후 다시 시도하세요.")
 
+# 감정 분석 결과 표시 (항상 표시)
+if st.session_state.emotion_score is not None:
+    st.subheader('감정 분석 결과')
+    emotion_circle = get_emotion_circle(st.session_state.emotion_score)
+    if st.session_state.emotion_score <= 3:
+        emotion_text = "나쁨"
+    elif st.session_state.emotion_score <= 7:
+        emotion_text = "보통"
+    else:
+        emotion_text = "좋음"
+    st.write(f"감정 점수: {st.session_state.emotion_score} - {emotion_text} {emotion_circle}")
+
+    # 감정 스펙트럼 시각화 (Altair 사용, 영어로 표시)
+    chart = plot_emotion_spectrum(st.session_state.emotion_score)
+    st.altair_chart(chart, use_container_width=True)
+
 # 채팅 UI - 사용자 입력 및 대화 내용 표시
 st.subheader('AI와 이어서 대화하기')
 
-chat_container = st.container()  # 대화 내용을 담을 컨테이너
-
 # 이전 대화 내용 출력
-with chat_container:
-    for role, message in st.session_state.chat_history:
-        if role == "User":
-            st.markdown(f"**You:** {message}")
-        else:
-            st.markdown(f"**AI:** {message}")
+for i, (role, message) in enumerate(st.session_state.chat_history):
+    if role == "User":
+        st.markdown(f'<div class="chat-message user"><div class="avatar"><img src="https://i.ibb.co/37nsPXm/user1.png"/></div><div class="message">{message}</div></div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="chat-message bot"><div class="avatar"><img src="https://i.ibb.co/Lv8jrLX/ai1.jpg"/></div><div class="message">{message}</div></div>', unsafe_allow_html=True)
 
 # 채팅 입력 필드 및 콜백 함수
 def submit_chat():
@@ -191,4 +231,4 @@ def submit_chat():
         st.session_state.chat_input = ""  # 입력 필드를 비움
 
 # 채팅 입력 필드
-st.text_input("메시지 입력 후, Enter키를 누르세요", key="chat_input", placeholder="메시지 입력 후, Enter키를 누르세요", on_change=submit_chat)
+st.text_input("메시지 입력 후, Enter키를 누르세요", key="chat_input", on_change=submit_chat)
