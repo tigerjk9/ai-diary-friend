@@ -77,8 +77,8 @@ def analyze_diary(content):
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "당신은 일기의 감정을 분석하는 AI입니다. 감정을 0에서 10까지의 숫자로 나타내세요. 0은 매우 나쁨, 10은 매우 좋음입니다."},
-                {"role": "user", "content": f"다음 일기의 감정을 분류해주세요:\n\n{content}"}
+                {"role": "system", "content": "너는 10대 학생들의 일기를 분석하고 감정을 이해하는 AI야. 감정을 0에서 10까지의 숫자로 나타내줘. 0은 매우 나쁨, 10은 매우 좋음이야."},
+                {"role": "user", "content": f"다음 일기의 감정을 분석해줘:\n\n{content}"}
             ]
         )
         emotion_text = response.choices[0].message.content.strip()
@@ -88,15 +88,15 @@ def analyze_diary(content):
         if match:
             emotion_score = int(match.group())  # 첫 번째로 발견된 숫자를 추출
         else:
-            st.error("감정 점수를 추출할 수 없습니다.")
+            st.error("감정 점수를 추출할 수 없어요.")
             return None, None
 
         # AI 피드백 생성
         feedback_response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "당신은 초, 중학생을 대상으로 하는 사회정서 지원 AI입니다. 친근하고 밝은 톤으로 대화하며, 이모티콘을 많이 사용하세요. 학생들의 감정을 이해하고 공감하며, 긍정적인 에너지를 전달해주세요."},
-                {"role": "user", "content": f"다음 일기에 대해 피드백을 해주세요:\n\n{content}"}
+                {"role": "system", "content": "너는 10대 학생들을 위한 에너지 넘치고 친근한 AI 상담사야. 학생들의 감정을 깊이 이해하고 공감하며, 그들의 눈높이에 맞는 쉬운 언어로 대화해. 격식 없는 친근한 말투를 사용하고, 적절한 이모티콘도 활용해. 상담사로서의 전문성을 유지하면서도 학생들이 편하게 대화할 수 있는 분위기를 만들어줘."},
+                {"role": "user", "content": f"다음 일기에 대해 피드백을 해줘:\n\n{content}"}
             ]
         )
         feedback = feedback_response.choices[0].message.content.strip()
@@ -107,13 +107,13 @@ def analyze_diary(content):
 
         return emotion_score, feedback
     except Exception as e:
-        st.error(f"오류가 발생했습니다: {str(e)}")
+        st.error(f"오류가 발생했어요: {str(e)}")
         return None, None
 
 # 감정 스펙트럼 시각화 (Altair 사용, 영어로 표시)
 def plot_emotion_spectrum(score):
     # 데이터 프레임 생성
-    df = pd.DataFrame({'x': [0, score, 10], 'y': [0, 0, 0]})
+    df = pd.DataFrame({'x': [0, score], 'y': [0, 0]})
     
     # 색상 결정
     color = '#4CAF50' if score > 7 else '#FFC107' if score > 3 else '#F44336'
@@ -162,37 +162,37 @@ def chat_with_ai(message):
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "당신은 초, 중학생을 대상으로 하는 사회정서 지원 AI입니다. 친근하고 밝은 톤으로 대화하며, 이모티콘을 많이 사용하세요. 학생들의 감정을 이해하고 공감하며, 긍정적인 에너지를 전달해주세요."},
+                {"role": "system", "content": "너는 10대 학생들을 위한 에너지 넘치고 친근한 AI 상담사야. 학생들의 감정을 깊이 이해하고 공감하며, 그들의 눈높이에 맞는 쉬운 언어로 대화해. 격식 없는 친근한 말투를 사용하고, 적절한 이모티콘도 활용해. 상담사로서의 전문성을 유지하면서도 학생들이 편하게 대화할 수 있는 분위기를 만들어줘."},
                 {"role": "user", "content": message}
             ]
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        st.error(f"오류가 발생했습니다: {str(e)}")
+        st.error(f"오류가 발생했어요: {str(e)}")
         return None
 
 # UI
 st.title('AI 일기 친구 🤖📔')
 
 st.write("""
-AI 일기 친구는 여러분의 일기를 분석하고 감정을 이해하여 따뜻한 피드백을 제공합니다.
-일기를 작성하고 '분석하기' 버튼을 누르면, AI가 여러분의 감정을 분석하고 응원의 메시지를 전달합니다.
-그 후 AI와 이어서 대화할 수 있어요! 😊
+안녕! 나는 너의 일기를 읽고 감정을 이해하는 AI 친구야. 
+일기를 쓰고 '분석하기' 버튼을 누르면, 네 감정을 분석하고 응원 메시지를 보내줄게. 
+그 다음엔 계속 대화도 할 수 있어! 어때, 같이 이야기 나눠볼까? 😊
 """)
 
-diary_content = st.text_area("오늘의 일기를 작성해주세요:", height=200)
+diary_content = st.text_area("오늘의 일기를 자유롭게 써봐:", height=200)
 
 # 분석하기 버튼
 if st.button("분석하기"):
     if api_key:
-        with st.spinner('AI가 열심히 분석 중이에요... 🤔'):
+        with st.spinner('열심히 분석 중이야... 🤔'):
             emotion_score, feedback = analyze_diary(diary_content)
         
         if emotion_score is not None and feedback:
             st.session_state.chat_history = []  # 채팅 기록 초기화
             st.session_state.chat_history.append(("AI", feedback))
     else:
-        st.error("OpenAI API 키가 필요합니다. 입력 후 다시 시도하세요.")
+        st.error("OpenAI API 키가 필요해. 입력하고 다시 시도해줘!")
 
 # 감정 분석 결과 표시 (항상 표시)
 if st.session_state.emotion_score is not None:
@@ -211,14 +211,14 @@ if st.session_state.emotion_score is not None:
     st.altair_chart(chart, use_container_width=True)
 
 # 채팅 UI - 사용자 입력 및 대화 내용 표시
-st.subheader('AI와 이어서 대화하기')
+st.subheader('나랑 더 이야기하기')
 
 # 이전 대화 내용 출력
 for i, (role, message) in enumerate(st.session_state.chat_history):
     if role == "User":
         st.markdown(f'<div class="chat-message user"><div class="avatar"><img src="https://i.ibb.co/37nsPXm/user1.png"/></div><div class="message">{message}</div></div>', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="chat-message bot"><div class="avatar"><img src="https://i.ibb.co/Lv8jrLX/ai1.jpg"/></div><div class="message">{message}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="chat-message bot"><div class="avatar"><img src="https://i.ibb.co/6WHGxv5/DDD.png"/></div><div class="message">{message}</div></div>', unsafe_allow_html=True)
 
 # 채팅 입력 필드 및 콜백 함수
 def submit_chat():
@@ -231,4 +231,4 @@ def submit_chat():
         st.session_state.chat_input = ""  # 입력 필드를 비움
 
 # 채팅 입력 필드
-st.text_input("메시지 입력 후, Enter키를 누르세요", key="chat_input", on_change=submit_chat)
+st.text_input("여기에 메시지를 입력하고 Enter 키를 눌러봐!", key="chat_input", on_change=submit_chat)
