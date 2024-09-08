@@ -55,24 +55,40 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# OpenAI 클라이언트 초기화
+# OpenAI 키 처리
 api_key = None
 
-# OpenAI 키 입력받기 (사이드바 사용)
+# 사이드바에서 API 키 입력 받기
 with st.sidebar:
-    user_api_key = st.text_input("OpenAI 키 값을 입력하세요. 시험 삼아 테스트하려면 빈칸으로 두세요.")
+    user_api_key = st.text_input("OpenAI API 키를 입력하세요:")
     if user_api_key:
         api_key = user_api_key
-    else:
-        api_key = st.secrets["openai_api_key"]
-    
+
     # 만든이 정보 추가
     st.markdown('<p class="creator-info">만든이: 대전장대초 김진관(닷커넥터)</p>', unsafe_allow_html=True)
 
+# 환경 변수에서 API 키 확인
+if not api_key and 'OPENAI_API_KEY' in os.environ:
+    api_key = os.environ['OPENAI_API_KEY']
+
+# Streamlit Secrets에서 API 키 확인
+if not api_key:
+    try:
+        api_key = st.secrets["openai_api_key"]
+    except KeyError:
+        st.error("OpenAI API 키가 설정되지 않았습니다.")
+        st.info("다음 방법 중 하나로 API 키를 설정해주세요:")
+        st.info("1. 사이드바에 직접 입력")
+        st.info("2. 환경 변수 'OPENAI_API_KEY'에 설정")
+        st.info("3. Streamlit Cloud의 Secrets에 'openai_api_key'로 설정")
+        st.stop()
+
+# API 키로 OpenAI 클라이언트 초기화
 if api_key:
     client = OpenAI(api_key=api_key)
 else:
-    st.warning("OpenAI API 키가 필요합니다. 키를 입력하거나 테스트 모드를 사용하세요.")
+    st.error("OpenAI API 키가 필요합니다. 위의 지침을 따라 API 키를 설정해주세요.")
+    st.stop()
 
 # 세션 상태 초기화
 if 'chat_history' not in st.session_state:
