@@ -31,6 +31,8 @@ def analyze_diary(content):
                 {"role": "user", "content": f"다음 일기의 감정을 분류해주세요:\n\n{content}"}
             ]
         )
+        st.write("API Response: ", response)  # API 응답 확인
+
         emotion_text = response.choices[0].message.content.strip()
 
         # 감정 점수만 추출 (정규 표현식 사용)
@@ -67,6 +69,8 @@ def plot_emotion_spectrum(score):
         'y': [0] * 11
     })
 
+    st.write("Base Data for Spectrum: ", base_data)  # 데이터 확인
+
     # 스펙트럼 색상 설정
     colors = ['#F44336', '#FF9800', '#FFC107', '#FFEB3B', '#CDDC39', 
               '#8BC34A', '#4CAF50', '#009688', '#00BCD4', '#03A9F4', '#2196F3']
@@ -85,6 +89,8 @@ def plot_emotion_spectrum(score):
         'score': [score],
         'y': [0]
     })
+
+    st.write("Score Data: ", score_data)  # 점수 데이터 확인
 
     # 현재 점수 표시 (삼각형 마커)
     score_marker = alt.Chart(score_data).mark_triangle(
@@ -202,6 +208,7 @@ with chat_container:
 # 채팅 입력 필드 및 콜백 함수
 def submit_chat():
     user_message = st.session_state.chat_input
+    st.write("User Input: ", user_message)  # 입력 확인
     if user_message:
         st.session_state.chat_history.append(("User", user_message))  # 사용자의 메시지를 기록
         ai_response = chat_with_ai(user_message)
