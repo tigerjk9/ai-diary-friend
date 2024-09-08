@@ -1,17 +1,14 @@
 import streamlit as st
-import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.use('Agg')  # 백엔드 설정
 from openai import OpenAI
 import re
 
-# OpenAI 클라이언트 초기화
+# Streamlit Secrets에서 API 키 가져오기
 api_key = st.secrets.get("OPENAI_API_KEY")
 
 if api_key:
     client = OpenAI(api_key=api_key)
 else:
-    st.error("OpenAI API 키가 설정되지 않았습니다. Streamlit 시크릿에서 OPENAI_API_KEY를 설정해주세요.")
+    st.error("OpenAI API 키가 설정되지 않았습니다.")
     st.stop()
 
 # 세션 상태 초기화
@@ -56,18 +53,6 @@ def analyze_diary(content):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None, None
 
-# 감정 스펙트럼 시각화
-def plot_emotion_spectrum(score):
-    fig, ax = plt.subplots(figsize=(8, 2))
-    ax.axhline(y=0.5, xmin=0, xmax=score / 10, color='#4CAF50' if score > 6 else '#F44336' if score < 4 else '#FFC107', linewidth=10)
-    ax.set_xlim(0, 10)
-    ax.set_xticks([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-    ax.set_xticklabels(['0 (나쁨)', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10 (좋음)'])
-    ax.set_yticks([])
-    ax.set_xlabel('감정 점수 (0에서 10)')
-    ax.set_title('감정 스펙트럼')
-    st.pyplot(fig)
-
 # AI와 채팅 함수
 def chat_with_ai(message):
     try:
@@ -100,8 +85,7 @@ if st.button("분석하기"):
     
     if emotion_score is not None and feedback:
         st.subheader('감정 분석 결과')
-        st.write(f"감정 점수: {emotion_score}")
-        plot_emotion_spectrum(emotion_score)
+        st.write(f"감정 점수: {emotion_score}/10")
         
         st.subheader('AI 피드백')
         st.info(feedback)
