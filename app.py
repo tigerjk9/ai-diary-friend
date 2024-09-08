@@ -61,13 +61,13 @@ def analyze_diary(content):
 
 # 감정 스펙트럼 시각화 (Altair 사용)
 def plot_emotion_spectrum(score):
-    # 데이터 생성 (0부터 10까지 선형 감정 스펙트럼)
+    # 기본 데이터 생성 (0부터 10까지의 선형 감정 스펙트럼)
     base_data = pd.DataFrame({
         'x': range(11),
         'y': [0] * 11
     })
 
-    # 스펙트럼 색상 설정
+    # 스펙트럼 색상 설정 (0~10 구간을 색상으로 표현)
     colors = ['#F44336', '#FF9800', '#FFC107', '#FFEB3B', '#CDDC39', 
               '#8BC34A', '#4CAF50', '#009688', '#00BCD4', '#03A9F4', '#2196F3']
     
@@ -78,7 +78,7 @@ def plot_emotion_spectrum(score):
         color=alt.Color('x:Q', scale=alt.Scale(domain=[0, 10], range=colors), legend=None)
     )
 
-    # 현재 점수 강조 표시
+    # 현재 점수 강조 표시 (검정색 선으로 감정 점수 표시)
     score_marker = alt.Chart(pd.DataFrame({'x': [score], 'y': [0]})).mark_rule(
         color='black',
         strokeWidth=5
@@ -87,7 +87,7 @@ def plot_emotion_spectrum(score):
         y='y:Q'
     )
 
-    # 점수 라벨
+    # 현재 점수 라벨 표시 (현재 감정 점수 텍스트)
     score_label = alt.Chart(pd.DataFrame({'x': [score], 'y': [0], 'label': [str(score)]})).mark_text(
         align='center',
         baseline='bottom',
@@ -96,11 +96,11 @@ def plot_emotion_spectrum(score):
         color='black'
     ).encode(
         x='x:Q',
-        y=alt.value(0),  # y값 고정
+        y=alt.value(0),  # y값을 고정하여 가로 방향에만 영향을 줌
         text='label:N'
     )
 
-    # 라벨 (감정 스펙트럼의 시작과 끝을 설명)
+    # 스펙트럼 라벨 (감정 스펙트럼의 양 끝 설명 - 매우 나쁨과 매우 좋음)
     label_data = pd.DataFrame({
         'x': [0, 10],
         'y': [0, 0],
@@ -118,7 +118,7 @@ def plot_emotion_spectrum(score):
         text='label'
     )
 
-    # 차트 조합
+    # 모든 차트 조합
     final_chart = spectrum_chart + score_marker + score_label + labels
 
     return final_chart
@@ -138,7 +138,7 @@ def chat_with_ai(message):
         st.error(f"오류가 발생했습니다: {str(e)}")
         return None
 
-# UI
+# UI 구성
 st.title('AI 일기 친구 🤖📔')
 
 st.write("""
