@@ -15,46 +15,53 @@ api_key = None
 # Streamlit 페이지 설정
 st.set_page_config(page_title="AI 일기 친구", page_icon="📔", layout="wide")
 
-# CSS를 사용하여 한글 폰트 및 채팅 UI 스타일 적용
+# CSS를 사용하여 한글 폰트, 채팅 UI 스타일, 그리고 만든이 정보 스타일 적용
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&display=swap');
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     html, body, [class*="css"] {
         font-family: 'Nanum Gothic', sans-serif;
     }
     .chat-message {
-        padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; display: flex
+        padding: 1rem; 
+        border-radius: 0.5rem; 
+        margin-bottom: 1rem; 
+        display: flex;
+        flex-direction: column;
     }
     .chat-message.user {
-        background-color: #2b313e
+        background-color: #2b313e;
+        color: #ffffff;
     }
     .chat-message.bot {
-        background-color: #475063
-    }
-    .chat-message .avatar {
-      width: 20%;
-    }
-    .chat-message .avatar img {
-      max-width: 78px;
-      max-height: 78px;
-      border-radius: 50%;
-      object-fit: cover;
+        background-color: #475063;
+        color: #ffffff;
     }
     .chat-message .message {
-      width: 80%;
-      padding: 0 1.5rem;
-      color: #fff;
+      width: 100%;
+    }
+    .creator-info {
+        font-family: 'Pretendard', sans-serif;
+        font-weight: 600;
+        font-size: 0.9em;
+        color: #4a4a4a;
+        margin-top: 20px;
+        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# OpenAI 키 입력받기 (좌측 상단으로 이동하기 위해 사이드바 사용)
+# OpenAI 키 입력받기 (사이드바 사용)
 with st.sidebar:
     user_api_key = st.text_input("OpenAI 키 값을 입력하세요. 시험 삼아 테스트하려면 빈칸으로 두세요.")
     if user_api_key:
         api_key = user_api_key
     else:
         api_key = os.getenv('OPENAI_API_KEY')
+    
+    # 만든이 정보 추가
+    st.markdown('<p class="creator-info">만든이: 대전장대초 김진관(닷커넥터)</p>', unsafe_allow_html=True)
 
 if api_key:
     client = OpenAI(api_key=api_key)
@@ -211,14 +218,14 @@ if st.session_state.emotion_score is not None:
     st.altair_chart(chart, use_container_width=True)
 
 # 채팅 UI - 사용자 입력 및 대화 내용 표시
-st.subheader('나랑 더 이야기하기')
+st.subheader('AI 일기 친구와 더 이야기하기')
 
 # 이전 대화 내용 출력
-for i, (role, message) in enumerate(st.session_state.chat_history):
+for role, message in st.session_state.chat_history:
     if role == "User":
-        st.markdown(f'<div class="chat-message user"><div class="avatar"><img src="https://i.ibb.co/37nsPXm/user1.png"/></div><div class="message">{message}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="chat-message user"><div class="message"><strong>나:</strong> {message}</div></div>', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="chat-message bot"><div class="avatar"><img src="https://i.ibb.co/6WHGxv5/DDD.png"/></div><div class="message">{message}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="chat-message bot"><div class="message"><strong>AI:</strong> {message}</div></div>', unsafe_allow_html=True)
 
 # 채팅 입력 필드 및 콜백 함수
 def submit_chat():
