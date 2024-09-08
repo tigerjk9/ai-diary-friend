@@ -1,9 +1,10 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-from matplotlib import rc
+from matplotlib import font_manager, rc
 import os
 import re
 from openai import OpenAI
+import requests
 
 # OpenAI API Key 환경 변수로부터 불러오기
 api_key = os.getenv("OPENAI_API_KEY")
@@ -21,13 +22,19 @@ if 'chat_history' not in st.session_state:
 if 'feedback' not in st.session_state:
     st.session_state.feedback = ""  # 피드백을 저장하기 위한 변수
 
-# 한글 폰트 설정 (Streamlit Cloud에서 사용할 수 있는 기본 폰트 설정)
+# 한글 폰트 설치 및 설정 (Streamlit Cloud에서 NanumGothic 폰트를 직접 다운로드하여 사용)
 def set_korean_font():
-    try:
-        # DejaVu Sans 또는 Arial Unicode MS 폰트로 설정
-        rc('font', family='DejaVu Sans')
-    except:
-        st.error("폰트를 설정하는 과정에서 문제가 발생했습니다. 시스템 폰트를 사용합니다.")
+    font_url = "https://github.com/team-scholarx/NanumGothic/raw/main/NanumGothic.ttf"
+    font_path = "NanumGothic.ttf"
+    
+    if not os.path.exists(font_path):
+        # 폰트 다운로드
+        with open(font_path, "wb") as f:
+            f.write(requests.get(font_url).content)
+    
+    # 폰트를 matplotlib에 등록 및 설정
+    font_manager.fontManager.addfont(font_path)
+    rc('font', family='NanumGothic')
 
 set_korean_font()  # 한글 폰트 설정
 
@@ -79,7 +86,7 @@ def plot_emotion_spectrum(score):
     # 축 설정 (0: 나쁨, 10: 좋음)
     ax.set_xlim(0, 10)
     ax.set_xticks([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-    ax.set_xticklabels(['0 (나쁨)', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10 (좋음)'])
+    ax.set_xticklabels(['0 (나쁨)', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10 (좋음)'], fontproperties=font_manager.FontProperties(fname='NanumGothic.ttf'))
     ax.set_yticks([])  # y축 제거
     ax.set_xlabel('감정 점수 (0에서 10)')
     ax.set_title('감정 스펙트럼')
