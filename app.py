@@ -9,8 +9,10 @@ from dotenv import load_dotenv
 # .env 파일에서 환경 변수 로드
 load_dotenv()
 
-# OpenAI 클라이언트 초기화
-api_key = None
+# --- 초기 설정 ---
+# OpenAI 클라이언트 및 API 키 관련 변수
+client = None
+OPENAI_API_KEY_FROM_ENV = os.getenv('OPENAI_API_KEY')
 
 # Streamlit 페이지 설정
 st.set_page_config(page_title="AI 일기 친구", page_icon="📔", layout="wide")
@@ -33,10 +35,14 @@ st.markdown("""
     .chat-message.user {
         background-color: #2b313e;
         color: #ffffff;
+        align-self: flex-end; /* 사용자 메시지를 오른쪽으로 정렬 */
+        max-width: 80%; /* 메시지 최대 너비 설정 */
     }
     .chat-message.bot {
         background-color: #475063;
         color: #ffffff;
+        align-self: flex-start; /* AI 메시지를 왼쪽으로 정렬 */
+        max-width: 80%; /* 메시지 최대 너비 설정 */
     }
     .chat-message .message {
       width: 100%;
@@ -52,190 +58,291 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# OpenAI 키 입력받기 (사이드바 사용)
+# --- API 키 및 클라이언트 초기화 (사이드바) ---
 with st.sidebar:
-    user_api_key = st.text_input("OpenAI 키 값을 입력하세요. 시험 삼아 테스트하려면 빈칸으로 두세요.")
-    if user_api_key:
-        api_key = user_api_key
-    else:
-        api_key = os.getenv('OPENAI_API_KEY')
-    
-    # 만든이 정보 추가
+    st.header("API 설정 🔑")
+    user_provided_api_key = st.text_input(
+        "OpenAI API 키를 입력하세요:",
+        type="password",
+        help="키를 입력하지 않으면 환경 변수(.env 파일)의 키를 사용합니다."
+    )
+
+    final_api_key = None
+    if user_provided_api_key:
+        final_api_key = user_provided_api_key
+    elif OPENAI_API_KEY_FROM_ENV:
+        final_api_key = OPENAI_API_KEY_FROM_ENV
+
+    # 세션 상태에 클라이언트 초기화 성공 여부 저장 변수 초기화
+    if 'client_init_success' not in st.session_state:
+        st.session_state.client_init_success = False
+    if 'current_client_api_key' not in st.session_state:
+        st.session_state.current_client_api_key = None
+
+    if final_api_key:
+        # API 키가 변경되었거나, 클라이언트가 아직 초기화되지 않은 경우에만 초기화 시도
+        if client is None or st.session_state.current_client_api_key != final_api_key:
+            try:
+                client = OpenAI(api_key=final_api_key)
+                st.session_state.current_client_api_key = final_api_key
+                st.session_state.client_init_success = True
+                st.sidebar.success("OpenAI 클라이언트가 성공적으로 초기화되었습니다! 🎉")
+            except Exception as e:
+                st.sidebar.error(f"OpenAI 클라이언트 초기화 실패: {e}")
+                client = None # 실패 시 client를 None으로 명시적 설정
+                st.session_state.current_client_api_key = None
+                st.session_state.client_init_success = False
+        # 이미 해당 키로 클라이언트가 초기화된 경우 메시지 생략 (선택적)
+        # else:
+        #     if st.session_state.client_init_success:
+        #         st.sidebar.info("OpenAI 클라이언트가 이미 초기화되어 있습니다.")
+
+    else: # API 키가 없는 경우
+        if client is not None: # 이전에 클라이언트가 있었지만 키가 제거된 경우
+            client = None
+            st.session_state.current_client_api_key = None
+            st.session_state.client_init_success = False
+            st.sidebar.info("API 키가 제거되어 클라이언트가 비활성화되었습니다.")
+        # client가 원래 None이었고 키도 없는 경우, client_init_success를 False로 유지
+        st.session_state.client_init_success = False
+
+
+    st.markdown("---")
     st.markdown('<p class="creator-info">만든이: 대전장대초 김진관(닷커넥터)</p>', unsafe_allow_html=True)
 
-if api_key:
-    client = OpenAI(api_key=api_key)
-else:
-    st.warning("OpenAI API 키가 필요합니다. 키를 입력하거나 테스트 모드를 사용하세요.")
 
-# 세션 상태 초기화
+# --- 세션 상태 초기화 ---
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
-
-if 'feedback' not in st.session_state:
-    st.session_state.feedback = ""  # 피드백을 저장하기 위한 변수
-
+if 'feedback' not in st.session_state: # 피드백은 analyze_diary 결과로 저장되므로, 초기값은 빈 문자열 또는 None
+    st.session_state.feedback = None
 if 'emotion_score' not in st.session_state:
     st.session_state.emotion_score = None
 
-# 감정 분석 함수
+# --- 핵심 기능 함수 ---
 def analyze_diary(content):
+    """일기 내용을 분석하여 감정 점수와 피드백을 반환합니다."""
+    if not st.session_state.get('client_init_success', False) or not client:
+        st.error("AI 기능을 사용하려면 OpenAI API 키를 설정하고 클라이언트가 성공적으로 초기화되어야 합니다.")
+        return None, None
     try:
-        response = client.chat.completions.create(
-            model="gpt-4",
+        # 감정 점수 분석 요청
+        score_response = client.chat.completions.create(
+            model="gpt-4", # 또는 "gpt-3.5-turbo" 등 사용 가능한 모델
             messages=[
-                {"role": "system", "content": "너는 10대 학생들의 일기를 분석하고 감정을 이해하는 AI야. 감정을 0에서 10까지의 숫자로 나타내줘. 0은 매우 나쁨, 10은 매우 좋음이야."},
-                {"role": "user", "content": f"다음 일기의 감정을 분석해줘:\n\n{content}"}
+                {"role": "system", "content": "너는 10대 학생들의 일기를 분석하고 감정을 이해하는 AI야. 일기 내용을 바탕으로 감정 점수를 0에서 10 사이의 정수 숫자로만 응답해줘 (예: 7). 다른 설명이나 문장은 절대 포함하지 마."},
+                {"role": "user", "content": f"다음 일기의 감정을 분석하고 감정 점수를 알려줘:\n\n{content}"}
             ]
         )
-        emotion_text = response.choices[0].message.content.strip()
+        emotion_text = score_response.choices[0].message.content.strip()
+        
+        emotion_score = None
+        # 1. 숫자만 있는지 확인 (가장 이상적인 경우)
+        match_strict = re.fullmatch(r'\s*(\d{1,2})\s*', emotion_text) # 0-10점 고려, 한두자리 숫자
+        if match_strict:
+            score = int(match_strict.group(1))
+            if 0 <= score <= 10:
+                emotion_score = score
+            else:
+                st.warning(f"AI가 반환한 감정 점수({score})가 유효한 범위(0-10)를 벗어났습니다. AI 응답: '{emotion_text}'")
+        
+        # 2. 만약 숫자만 있는게 아니라면, 문장 속에서 숫자 추출 시도 (폴백)
+        if emotion_score is None:
+            matches_fallback = re.findall(r'\d+', emotion_text)
+            if matches_fallback:
+                # 여러 숫자가 있다면, 마지막 숫자를 점수로 간주하거나, 추가적인 로직 필요 가능성 있음
+                # 여기서는 마지막 숫자를 사용하고, 0-10 범위인지 확인
+                potential_score = int(matches_fallback[-1])
+                if 0 <= potential_score <= 10:
+                    emotion_score = potential_score
+                    st.info(f"AI 응답에서 감정 점수를 '{emotion_score}'(으)로 추출했습니다 (폴백 로직 사용). AI 응답: '{emotion_text}'")
+                else:
+                    st.error(f"AI 응답에서 유효한 감정 점수(0-10)를 추출할 수 없습니다 (폴백). AI 응답: '{emotion_text}'")
+                    return None, None # 점수 추출 실패 시 여기서 종료
+            else:
+                st.error(f"AI 응답에서 감정 점수를 찾을 수 없습니다. AI 응답: '{emotion_text}'")
+                return None, None # 점수 추출 실패 시 여기서 종료
 
-        # 감정 점수만 추출 (정규 표현식 사용)
-        match = re.search(r'\d+', emotion_text)
-        if match:
-            emotion_score = int(match.group())  # 첫 번째로 발견된 숫자를 추출
-        else:
-            st.error("감정 점수를 추출할 수 없어요.")
-            return None, None
+        if emotion_score is None: # 최종적으로 점수 확정 실패
+             st.error(f"감정 점수를 최종적으로 확정할 수 없었습니다. AI 응답: '{emotion_text}'")
+             return None, None
 
-        # AI 피드백 생성
+        # AI 피드백 생성 요청
         feedback_response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4", # 또는 "gpt-3.5-turbo"
             messages=[
                 {"role": "system", "content": "너는 10대 학생들을 위한 에너지 넘치고 친근한 AI 상담사야. 학생들의 감정을 깊이 이해하고 공감하며, 그들의 눈높이에 맞는 쉬운 언어로 대화해. 격식 없는 친근한 말투를 사용하고, 적절한 이모티콘도 활용해. 상담사로서의 전문성을 유지하면서도 학생들이 편하게 대화할 수 있는 분위기를 만들어줘."},
-                {"role": "user", "content": f"다음 일기에 대해 피드백을 해줘:\n\n{content}"}
+                {"role": "user", "content": f"내 일기 내용은 다음과 같아. 이 일기에 대해 따뜻하고 친근한 말투로 공감과 격려의 피드백을 해줘:\n\n{content}\n\n(참고: 내 감정 점수는 {emotion_score}/10점이야.)"}
             ]
         )
         feedback = feedback_response.choices[0].message.content.strip()
 
-        # 피드백을 세션 상태에 저장하여 유지
         st.session_state.feedback = feedback
         st.session_state.emotion_score = emotion_score
-
         return emotion_score, feedback
+
     except Exception as e:
-        st.error(f"오류가 발생했어요: {str(e)}")
+        st.error(f"일기 분석 중 오류가 발생했어요: {str(e)}")
         return None, None
 
-# 감정 스펙트럼 시각화 (Altair 사용, 영어로 표시)
 def plot_emotion_spectrum(score):
-    # 데이터 프레임 생성
-    df = pd.DataFrame({'x': [0, score], 'y': [0, 0]})
+    """감정 점수를 Altair 스펙트럼 차트로 시각화합니다."""
+    if score is None:
+        return None
+    df = pd.DataFrame({'x': [0, score], 'y': [0, 0], 'score': [score, score]})
     
-    # 색상 결정
     color = '#4CAF50' if score > 7 else '#FFC107' if score > 3 else '#F44336'
     
-    # Altair 차트 생성 (영어로 표시)
     chart = alt.Chart(df).mark_line(
         color=color,
-        strokeWidth=10
+        strokeWidth=15, # 선 굵기 증가
+        opacity=0.8,
+        strokeCap='round' # 선 끝을 둥글게
     ).encode(
-        x=alt.X('x', scale=alt.Scale(domain=[0, 10]), axis=alt.Axis(title='Emotion Score (0 to 10)', values=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])),
-        y=alt.Y('y', axis=None)
+        x=alt.X('x:Q', scale=alt.Scale(domain=[0, 10]), axis=alt.Axis(title='감정 점수 (0-10)', values=list(range(11)), labelAngle=0)),
+        y=alt.Y('y:Q', axis=None),
+        tooltip=[alt.Tooltip('score:Q', title='현재 점수')]
     ).properties(
-        width=600,
-        height=100,
-        title='Emotion Spectrum'
+        width=alt.Step(50), # 너비를 반응형으로 또는 고정값으로 설정 가능
+        height=50, # 높이 감소
+        title=alt.TitleParams(text='나의 감정 스펙트럼', anchor='middle', fontSize=16)
     )
     
-    # 점수 표시
+    # 점수 표시 텍스트 (개선된 위치 및 스타일)
     text = alt.Chart(pd.DataFrame({'x': [score], 'y': [0], 'text': [f'{score}']})).mark_text(
         align='center',
-        baseline='bottom',
-        dy=-5
+        baseline='middle', # 중앙 정렬
+        dy=-25, # 텍스트를 선 위로 조금 더 올림
+        fontSize=18, # 폰트 크기 증가
+        fontWeight='bold',
+        color=color
     ).encode(
-        x='x',
-        y='y',
-        text='text'
+        x='x:Q',
+        y='y:Q',
+        text='text:N'
     )
-    
-    # 차트와 텍스트 결합
-    final_chart = chart + text
-    
-    return final_chart
+    return chart + text
 
-# 감정 점수에 따른 동그라미 색상 결정
 def get_emotion_circle(score):
-    if score <= 3:
-        return "🔴"  # 빨간 동그라미
-    elif score <= 7:
-        return "🟡"  # 노란 동그라미
-    else:
-        return "🟢"  # 초록 동그라미
+    """감정 점수에 따라 이모티콘 동그라미를 반환합니다."""
+    if score is None: return "❓"
+    if score <= 3: return "🔴"
+    elif score <= 7: return "🟡"
+    else: return "🟢"
 
-# AI와 채팅 함수
-def chat_with_ai(message):
+def chat_with_ai(message_history):
+    """AI와 채팅 응답을 생성합니다."""
+    if not st.session_state.get('client_init_success', False) or not client:
+        st.error("AI 기능을 사용하려면 OpenAI API 키를 설정하고 클라이언트가 성공적으로 초기화되어야 합니다.")
+        return None
+    
+    # 전체 대화 내역을 API에 전달하기 위해 포맷팅
+    formatted_messages = [{"role": "system", "content": "너는 10대 학생들을 위한 에너지 넘치고 친근한 AI 상담사야. 학생들의 감정을 깊이 이해하고 공감하며, 그들의 눈높이에 맞는 쉬운 언어로 대화해. 격식 없는 친근한 말투를 사용하고, 적절한 이모티콘도 활용해. 이전 대화 내용을 참고하여 자연스럽게 이어가줘."}]
+    for role, content in message_history:
+        formatted_messages.append({"role": "user" if role == "User" else "assistant", "content": content})
+
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "너는 10대 학생들을 위한 에너지 넘치고 친근한 AI 상담사야. 학생들의 감정을 깊이 이해하고 공감하며, 그들의 눈높이에 맞는 쉬운 언어로 대화해. 격식 없는 친근한 말투를 사용하고, 적절한 이모티콘도 활용해. 상담사로서의 전문성을 유지하면서도 학생들이 편하게 대화할 수 있는 분위기를 만들어줘."},
-                {"role": "user", "content": message}
-            ]
+            model="gpt-4", # 또는 "gpt-3.5-turbo"
+            messages=formatted_messages
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        st.error(f"오류가 발생했어요: {str(e)}")
+        st.error(f"채팅 중 오류가 발생했어요: {str(e)}")
         return None
 
-# UI
+# --- UI 구성 ---
 st.title('AI 일기 친구 🤖📔')
 
-st.write("""
-안녕! 나는 너의 일기를 읽고 감정을 이해하는 AI 친구야. 
-일기를 쓰고 '분석하기' 버튼을 누르면, 네 감정을 분석하고 응원 메시지를 보내줄게. 
-그 다음엔 계속 대화도 할 수 있어! 어때, 같이 이야기 나눠볼까? 😊
+# API 키 설정 안내 (메인 화면에도 표시)
+if not st.session_state.get('client_init_success', False):
+    st.warning("⚠️ OpenAI API 키가 설정되지 않았거나 클라이언트 초기화에 실패했습니다. 왼쪽 사이드바에서 API 키를 입력해주세요. 키가 없으면 AI 기능이 작동하지 않습니다.")
+
+st.markdown("""
+안녕하세요! 저는 당신의 일기를 읽고 감정을 이해하며 함께 이야기 나눌 AI 친구예요.  
+오늘 하루 어떤 일이 있었는지, 어떤 감정을 느꼈는지 솔직하게 적어보세요.  
+'분석하기' 버튼을 누르면 당신의 감정을 분석하고 따뜻한 응원 메시지를 보내드릴게요.  
+그 후에는 저와 자유롭게 대화를 이어갈 수 있답니다! 😊
 """)
 
-diary_content = st.text_area("오늘의 일기를 자유롭게 써봐:", height=200)
+diary_content = st.text_area("오늘의 일기를 자유롭게 써보세요:", height=250, placeholder="여기에 일기를 작성해주세요...")
 
-# 분석하기 버튼
-if st.button("분석하기"):
-    if api_key:
-        with st.spinner('열심히 분석 중이야... 🤔'):
+# "분석하기" 버튼
+if st.button("✏️ 일기 분석하기", type="primary"):
+    if not st.session_state.get('client_init_success', False) or not client:
+        st.error("먼저 사이드바에서 OpenAI API 키를 설정해주세요.")
+    elif not diary_content.strip():
+        st.warning("일기 내용을 입력해주세요! ✍️")
+    else:
+        with st.spinner('AI가 당신의 일기를 열심히 읽고 있어요... 🤔'):
             emotion_score, feedback = analyze_diary(diary_content)
         
-        if emotion_score is not None and feedback:
-            st.session_state.chat_history = []  # 채팅 기록 초기화
-            st.session_state.chat_history.append(("AI", feedback))
-    else:
-        st.error("OpenAI API 키가 필요해. 입력하고 다시 시도해줘!")
+        if emotion_score is not None and feedback is not None:
+            st.session_state.chat_history = [] # 새 분석 시 채팅 기록 초기화
+            st.session_state.chat_history.append(("AI", feedback)) # AI의 첫 피드백을 채팅 기록에 추가
+            st.success("일기 분석 완료! 아래에서 결과를 확인하고 대화를 시작해보세요. 👇")
+            # 페이지 새로고침 없이 바로 결과 표시를 위해 명시적으로 상태 업데이트 후 rerun 유도 가능
+            # st.experimental_rerun() # 필요에 따라 사용
+        # analyze_diary 내부에서 오류 메시지 처리하므로 별도 else 불필요
 
-# 감정 분석 결과 표시 (항상 표시)
+# 감정 분석 결과 표시 (st.session_state.emotion_score가 있을 때만)
 if st.session_state.emotion_score is not None:
-    st.subheader('감정 분석 결과')
+    st.subheader('📊 나의 감정 분석 결과')
     emotion_circle = get_emotion_circle(st.session_state.emotion_score)
-    if st.session_state.emotion_score <= 3:
-        emotion_text = "나쁨"
-    elif st.session_state.emotion_score <= 7:
-        emotion_text = "보통"
-    else:
-        emotion_text = "좋음"
-    st.write(f"감정 점수: {st.session_state.emotion_score} - {emotion_text} {emotion_circle}")
+    
+    emotion_category = "알 수 없음"
+    if st.session_state.emotion_score <= 3: emotion_category = "조금 힘든 날"
+    elif st.session_state.emotion_score <= 7: emotion_category = "그럭저럭 괜찮은 날"
+    else: emotion_category = "기분 좋은 날!"
 
-    # 감정 스펙트럼 시각화 (Altair 사용, 영어로 표시)
-    chart = plot_emotion_spectrum(st.session_state.emotion_score)
-    st.altair_chart(chart, use_container_width=True)
+    st.markdown(f"**감정 점수:** **{st.session_state.emotion_score}점** / 10점 - _{emotion_category}_ {emotion_circle}")
 
-# 채팅 UI - 사용자 입력 및 대화 내용 표시
-st.subheader('AI 일기 친구와 더 이야기하기')
+    # 감정 스펙트럼 시각화
+    altair_chart = plot_emotion_spectrum(st.session_state.emotion_score)
+    if altair_chart:
+        st.altair_chart(altair_chart, use_container_width=True)
+    st.markdown("---")
 
-# 이전 대화 내용 출력
-for role, message in st.session_state.chat_history:
-    if role == "User":
-        st.markdown(f'<div class="chat-message user"><div class="message"><strong>나:</strong> {message}</div></div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="chat-message bot"><div class="message"><strong>AI:</strong> {message}</div></div>', unsafe_allow_html=True)
 
-# 채팅 입력 필드 및 콜백 함수
-def submit_chat():
-    user_message = st.session_state.chat_input
-    if user_message:
-        st.session_state.chat_history.append(("User", user_message))  # 사용자의 메시지를 기록
-        ai_response = chat_with_ai(user_message)
-        if ai_response:
-            st.session_state.chat_history.append(("AI", ai_response))  # AI의 응답을 기록
-        st.session_state.chat_input = ""  # 입력 필드를 비움
+# 채팅 UI
+if st.session_state.get('client_init_success', False) and client: # 클라이언트 성공 시에만 채팅 UI 표시
+    st.subheader('💬 AI 친구와 더 이야기하기')
 
-# 채팅 입력 필드
-st.text_input("여기에 메시지를 입력하고 Enter 키를 눌러봐!", key="chat_input", on_change=submit_chat)
+    # 이전 대화 내용 출력
+    chat_container = st.container() # 채팅 메시지를 담을 컨테이너
+    with chat_container:
+        for role, message in st.session_state.chat_history:
+            if role == "User":
+                st.markdown(f'<div class="chat-message user"><div class="message">👤 **나:** {message}</div></div>', unsafe_allow_html=True)
+            else: # AI
+                st.markdown(f'<div class="chat-message bot"><div class="message">🤖 **AI:** {message}</div></div>', unsafe_allow_html=True)
+
+    # 사용자 입력 처리 콜백 함수
+    def handle_chat_submit():
+        user_message = st.session_state.chat_input_text # 입력 필드의 새 키 사용
+        if user_message:
+            st.session_state.chat_history.append(("User", user_message))
+            # AI 응답 생성 시 전체 대화 내역 전달
+            ai_response = chat_with_ai(st.session_state.chat_history) 
+            if ai_response:
+                st.session_state.chat_history.append(("AI", ai_response))
+            else:
+                # chat_with_ai 내부에서 오류 메시지를 표시하므로, 여기서는 추가 처리 안함
+                # 필요시 st.session_state.chat_history.append(("AI", "죄송해요, 지금은 답변을 드릴 수 없어요.")) 추가 가능
+                pass
+            st.session_state.chat_input_text = "" # 입력 필드 비우기
+
+    # 채팅 입력 필드 (고유한 키 사용 및 on_change 콜백 연결)
+    st.text_input(
+        "AI에게 메시지를 보내보세요:", 
+        key="chat_input_text", 
+        on_change=handle_chat_submit,
+        placeholder="하고 싶은 말을 자유롭게 적고 Enter를 누르세요..."
+    )
+else:
+    if st.session_state.emotion_score is not None: # 분석은 되었지만 키가 나중에 제거된 경우
+         st.info("AI와 대화를 계속하려면 사이드바에서 유효한 OpenAI API 키를 설정해주세요.")
+
+
+# 앱 하단에 추가적인 공간 확보
+st.markdown("<br><br>", unsafe_allow_html=True)
