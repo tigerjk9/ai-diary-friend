@@ -5,11 +5,11 @@
 import streamlit as st
 import altair as alt
 import pandas as pd
-from openai import OpenAI
+from openai import OpenAI # OpenAI 임포트
 import os
 import re
 from dotenv import load_dotenv
-import httpx # httpx import 추가
+import httpx # httpx는 여전히 다른 곳에서 사용될 수 있으므로 임포트는 유지합니다.
 
 # .env 파일에서 환경 변수 로드
 load_dotenv()
@@ -69,7 +69,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 세션 상태 초기화 ---
-# OpenAI 클라이언트, 초기화 성공 여부, 현재 사용된 API 키를 세션 상태에 저장
 if 'openai_client' not in st.session_state:
     st.session_state.openai_client = None
 if 'client_init_success' not in st.session_state:
@@ -92,49 +91,68 @@ with st.sidebar:
         help="키를 입력하지 않으면 환경 변수(.env 파일)의 키를 사용합니다."
     )
 
-    # 사용할 최종 API 키 결정
     final_api_key = None
     if user_provided_api_key:
         final_api_key = user_provided_api_key
     elif OPENAI_API_KEY_FROM_ENV:
         final_api_key = OPENAI_API_KEY_FROM_ENV
 
-    # API 키가 있거나 변경된 경우 클라이언트 (재)초기화
     if final_api_key:
         if st.session_state.current_client_api_key != final_api_key or not st.session_state.client_init_success:
             st.sidebar.info("OpenAI 클라이언트 초기화를 시도합니다...")
             try:
-                # 프록시 문제 발생 시도 (시스템 프록시 무시)
-                # 필요한 경우, 특정 프록시 서버 주소를 설정할 수 있습니다. 예: proxies={"http://": "http://proxy.example.com:8080", "https://": "https://proxy.example.com:8080"}
-                custom_http_client = httpx.Client(proxies=None) 
-                
+                # ==================================================================
+                # OpenAI 클라이언트 초기화 방식 변경
+                # 이전 코드:
+                # custom_http_client = httpx.Client(proxies=None)
+                # st.session_state.openai_client = OpenAI(
+                # api_key=final_api_key,
+                # http_client=custom_http_client
+                # )
+                # 변경된 코드: OpenAI 라이브러리가 내부 기본 httpx 클라이언트를 사용하도록 함
                 st.session_state.openai_client = OpenAI(
-                    api_key=final_api_key,
-                    http_client=custom_http_client # 명시적으로 http_client 전달
+                    api_key=final_api_key
                 )
-                # 테스트 API 호출 (예: 모델 목록 가져오기)로 키 유효성 검사 (선택 사항이지만 권장)
-                # st.session_state.openai_client.models.list() # 이 부분은 실제 API 호출을 발생시키므로, 필요에 따라 주석 처리 또는 활성화
-
+                # ==================================================================
+                
+                # (선택 사항) API 키 유효성 검사를 위한 간단한 API 호출 (예: 모델 목록 가져오기)
+                # 이 부분은 실제 API 호출을 발생시키므로, 비용 및 할당량에 유의해야 합니다.
+                # 초기화 성공 여부는 실제 API 호출 시점에서 확인하는 것이 더 일반적입니다.
+                # try:
+                #     st.session_state.openai_client.models.list() # 간단한 테스트 호출
+                #     st.session_state.client_init_success = True
+                #     st.sidebar.success("OpenAI 클라이언트가 성공적으로 초기화 및 테스트되었습니다! 🎉")
+                # except Exception as api_test_error:
+                #     st.sidebar.error(f"API 키 테스트 실패 또는 클라이언트 초기화 실패: {api_test_error}")
+                #     st.session_state.openai_client = None
+                #     st.session_state.current_client_api_key = None 
+                #     st.session_state.client_init_success = False
+                
                 st.session_state.current_client_api_key = final_api_key
-                st.session_state.client_init_success = True
-                st.sidebar.success("OpenAI 클라이언트가 성공적으로 초기화되었습니다! 🎉")
-            
+                st.session_state.client_init_success = True # 우선 성공으로 간주, 실제 API 호출 시 최종 확인
+                st.sidebar.success("OpenAI 클라이언트가 성공적으로 초기화되었습니다! (실제 API 사용 시 유효성 최종 확인)")
+
+
             except TypeError as te:
-                # OpenAI 라이브러리 버전 관련 TypeError 처리
                 error_message = f"OpenAI 클라이언트 초기화 실패 (TypeError): {te}\n"
-                if "got an unexpected keyword argument 'proxies'" in str(te) or "unexpected keyword argument 'http_client'" in str(te):
+                # 오류 메시지에 'proxies' 또는 '__init__' 관련 내용이 포함되어 있는지 확인하여 더 구체적인 안내 제공
+                if "got an unexpected keyword argument 'proxies'" in str(te) or "Client.__init__()" in str(te):
                     error_message += (
+                        "**이 오류는 `OpenAI` 라이브러리 버전 또는 `httpx`와의 호환성 문제일 가능성이 높습니다.**\n"
+                        "1. **`requirements.txt` 파일에서 `openai`와 `httpx`를 최신 안정 버전으로 명시했는지 확인해주세요.** (예: `openai>=1.20.0`, `httpx>=0.27.0`)\n"
+                        "2. GitHub에 변경사항을 푸시한 후, Streamlit Cloud 앱을 **재부팅(Reboot)**하고, 필요한 경우 **빌드 캐시를 삭제(Clear build cache)** 해보세요.\n"
+                        "3. 현재 코드는 `OpenAI(api_key=...)` 방식으로 클라이언트를 초기화하고 있습니다. 이 방식이 최신 라이브러리 버전과 호환되어야 합니다."
+                    )
+                else: # 기타 TypeError
+                     error_message += (
                         "**이 오류는 `OpenAI` 라이브러리 버전이 오래되었거나 호환되지 않을 수 있음을 나타냅니다.**\n"
-                        "1. **터미널에서 `pip install --upgrade openai httpx` 명령을 실행하여 라이브러리를 최신 버전으로 업그레이드해주세요.** (권장)\n"
-                        "2. 만약 프록시 환경 문제로 의심된다면, 코드 내에서 `custom_http_client = httpx.Client(proxies=...)` 설정을 확인해보세요.\n"
-                        "3. 그래도 문제가 지속되면 시스템 환경 변수(HTTP_PROXY, HTTPS_PROXY) 설정을 점검해주세요."
+                        "1. **`requirements.txt`에서 `openai`와 `httpx` 버전을 확인하고 최신 버전으로 업데이트 후 Streamlit Cloud 앱을 재부팅해주세요.**\n"
                     )
                 st.sidebar.error(error_message)
                 st.session_state.openai_client = None
                 st.session_state.current_client_api_key = None 
                 st.session_state.client_init_success = False
-            except Exception as e:
-                # 기타 예외 처리 (API 키 오류, 네트워크 오류 등)
+            except Exception as e: # APIConnectionError, AuthenticationError 등 OpenAI의 다른 특정 오류도 여기서 처리될 수 있음
                 st.sidebar.error(f"OpenAI 클라이언트 초기화 중 예상치 못한 오류 발생: {e}")
                 st.session_state.openai_client = None
                 st.session_state.current_client_api_key = None 
@@ -142,7 +160,6 @@ with st.sidebar:
         elif st.session_state.client_init_success: 
             st.sidebar.info("OpenAI 클라이언트가 이미 초기화되어 있습니다.")
     else: 
-        # API 키가 없는 경우 클라이언트 비활성화
         if st.session_state.client_init_success: 
             st.sidebar.info("API 키가 제거되어 OpenAI 클라이언트가 비활성화되었습니다.")
         st.session_state.openai_client = None 
@@ -216,10 +233,8 @@ def analyze_diary(content):
         st.session_state.emotion_score = emotion_score
         return emotion_score, feedback
 
-    except Exception as e:
-        st.error(f"일기 분석 중 오류가 발생했어요: {str(e)}")
-        # 오류 발생 시 어떤 API 호출에서 문제였는지 파악하기 위해 추가 정보 로깅 가능
-        # 예: print(f"Error during OpenAI API call: {e}") 
+    except Exception as e: # openai.APIConnectionError, openai.RateLimitError, openai.AuthenticationError 등 처리
+        st.error(f"일기 분석 중 OpenAI API 호출 오류가 발생했어요: {str(e)}")
         return None, None
 
 def plot_emotion_spectrum(score):
@@ -227,14 +242,10 @@ def plot_emotion_spectrum(score):
     if score is None:
         return None
     
-    # 데이터프레임 생성: x축은 0부터 score까지, y는 0으로 고정
     df = pd.DataFrame({'x_start': [0], 'x_end': [score], 'y': [0], 'score': [score]})
-    
-    # 점수에 따른 색상 결정
     color = '#4CAF50' if score > 7 else '#FFC107' if score > 3 else '#F44336'
 
-    # 라인 차트 생성
-    line_chart = alt.Chart(df).mark_rule( # mark_line 대신 mark_rule 사용 고려 (단일 선분) 또는 mark_bar
+    line_chart = alt.Chart(df).mark_rule(
         color=color, 
         strokeWidth=15, 
         opacity=0.8,
@@ -245,16 +256,15 @@ def plot_emotion_spectrum(score):
         y=alt.Y('y:Q', axis=None),
         tooltip=[alt.Tooltip('score:Q', title='현재 점수')]
     ).properties(
-        width='container', # use_container_width=True 와 유사하게 동작
+        width='container', 
         height=50, 
-        title=alt.TitleParams(text='나의 감정 스펙트럼', anchor='middle', fontSize=16, dy=-10) # dy로 타이틀 위치 조정
+        title=alt.TitleParams(text='나의 감정 스펙트럼', anchor='middle', fontSize=16, dy=-10)
     )
     
-    # 점수 텍스트 추가
     text_mark = alt.Chart(pd.DataFrame({'x': [score], 'y': [0], 'text': [f'{score}']})).mark_text(
         align='center',
         baseline='middle', 
-        dy=-25, # 텍스트 위치 조정 (라인 위로)
+        dy=-25, 
         fontSize=18, 
         fontWeight='bold',
         color=color
@@ -263,30 +273,15 @@ def plot_emotion_spectrum(score):
         y='y:Q',
         text='text:N'
     )
-    
-    # 차트와 텍스트 결합
-    # Altair는 layer 연산자를 사용하여 차트를 겹칠 수 있습니다.
-    # 여기서는 라인 위에 텍스트가 오도록 구성합니다.
-    # 단, mark_rule은 x, x2를 사용하므로, 텍스트 위치를 정확히 맞추려면 x축 스케일을 공유해야 합니다.
-    # 더 간단하게는, st.altair_chart 이후에 st.markdown으로 점수를 표시하는 방법도 있습니다.
-    # 여기서는 차트 내에 포함하는 시도를 유지합니다.
-    
-    # x축의 위치를 명확히 하기 위해 point 마크를 투명하게 추가하고 그 위에 텍스트를 올리는 방법도 고려할 수 있습니다.
-    # 또는, 라인 차트의 데이터를 [0, score]로 하고, 텍스트는 score 위치에만 표시합니다.
-    # 현재 코드는 라인과 텍스트를 별도로 생성 후 더하는 방식인데, x축 스케일 공유가 중요합니다.
-    # plot_emotion_spectrum 함수는 현재 구조로도 동작할 수 있으나, Altair의 layer 기능을 사용하면 더 정교한 제어가 가능합니다.
-    # 예시: return alt.layer(line_chart, text_mark).resolve_scale(x='shared')
-    
-    # 현재 방식(덧셈)으로도 대부분의 경우 잘 동작합니다.
     return line_chart + text_mark
 
 
 def get_emotion_circle(score):
     """감정 점수에 따라 이모티콘 동그라미를 반환합니다."""
     if score is None: return "❓"
-    if score <= 3: return "🔴" # 슬픔, 우울
-    elif score <= 7: return "🟡" # 보통, 그럭저럭
-    else: return "🟢" # 기쁨, 긍정
+    if score <= 3: return "🔴" 
+    elif score <= 7: return "🟡" 
+    else: return "🟢" 
 
 def chat_with_ai(message_history):
     """AI와 채팅 응답을 생성합니다."""
@@ -295,29 +290,28 @@ def chat_with_ai(message_history):
         return None
     
     current_client = st.session_state.openai_client
-    
-    # OpenAI API에 전달할 메시지 형식으로 변환
     formatted_messages = [{"role": "system", "content": "너는 10대 학생들을 위한 에너지 넘치고 친근한 AI 상담사야. 학생들의 감정을 깊이 이해하고 공감하며, 그들의 눈높이에 맞는 쉬운 언어로 대화해. 격식 없는 친근한 말투를 사용하고, 적절한 이모티콘도 활용해. 이전 대화 내용을 참고하여 자연스럽게 이어가줘."}]
     for role, content in message_history:
-        # 사용자의 이전 메시지는 "user", AI의 이전 메시지는 "assistant" 역할로 전달
         formatted_messages.append({"role": "user" if role == "User" else "assistant", "content": content})
 
     try:
         response = current_client.chat.completions.create(
-            model="gpt-4", # 또는 "gpt-3.5-turbo"
+            model="gpt-4", 
             messages=formatted_messages
         )
         return response.choices[0].message.content.strip()
-    except Exception as e:
-        st.error(f"채팅 중 오류가 발생했어요: {str(e)}")
+    except Exception as e: # openai.APIConnectionError, openai.RateLimitError, openai.AuthenticationError 등 처리
+        st.error(f"채팅 중 OpenAI API 호출 오류가 발생했어요: {str(e)}")
         return None
 
 # --- UI 구성 ---
 st.title('AI 일기 친구 🤖📔')
 
-# API 키 설정 및 클라이언트 초기화 상태에 따른 안내 메시지
-if not st.session_state.get('client_init_success', False):
-    st.warning("⚠️ OpenAI API 키가 설정되지 않았거나 클라이언트 초기화에 실패했습니다. 왼쪽 사이드바에서 API 키를 입력하고 초기화를 시도해주세요. 키가 없으면 AI 기능이 작동하지 않습니다.")
+if not st.session_state.get('client_init_success', False) and not final_api_key: # API 키가 아예 입력되지 않은 경우
+    st.warning("⚠️ OpenAI API 키를 설정해주세요. 왼쪽 사이드바에서 API 키를 입력하고 초기화를 시도해주세요. 키가 없으면 AI 기능이 작동하지 않습니다.")
+elif not st.session_state.get('client_init_success', False) and final_api_key: # API 키는 입력되었으나 초기화 실패한 경우
+    st.error("⚠️ OpenAI 클라이언트 초기화에 실패했습니다. 입력하신 API 키가 유효한지, 네트워크 연결에 문제가 없는지 확인해주세요. 사이드바의 오류 메시지를 참고하세요.")
+
 
 st.markdown("""
 안녕하세요! 저는 당신의 일기를 읽고 감정을 이해하며 함께 이야기 나눌 AI 친구예요.  
@@ -331,22 +325,17 @@ diary_content = st.text_area("오늘의 일기를 자유롭게 써보세요:", h
 if st.button("✏️ 일기 분석하기", type="primary", key="analyze_button"):
     if not st.session_state.get('client_init_success', False) or not st.session_state.openai_client:
         st.error("먼저 사이드바에서 OpenAI API 키를 설정하고 클라이언트 초기화를 성공적으로 완료해주세요.")
-    elif not diary_content.strip(): # strip()으로 공백만 있는 경우도 체크
+    elif not diary_content.strip(): 
         st.warning("일기 내용을 입력해주세요! ✍️")
     else:
         with st.spinner('AI가 당신의 일기를 열심히 읽고 있어요... 🤔'):
             emotion_score, feedback = analyze_diary(diary_content)
         
         if emotion_score is not None and feedback is not None:
-            # 분석 성공 시, 이전 채팅 기록 초기화 및 새 피드백으로 시작
             st.session_state.chat_history = [] 
             st.session_state.chat_history.append(("AI", feedback)) 
             st.success("일기 분석 완료! 아래에서 결과를 확인하고 대화를 시작해보세요. 👇")
-            # 분석 후 일기 내용 초기화 (선택 사항)
-            # st.session_state.diary_input = "" 
 
-
-# 감정 분석 결과 표시
 if st.session_state.emotion_score is not None:
     st.subheader('📊 나의 감정 분석 결과')
     emotion_circle = get_emotion_circle(st.session_state.emotion_score)
@@ -363,70 +352,42 @@ if st.session_state.emotion_score is not None:
         st.altair_chart(altair_chart, use_container_width=True)
     st.markdown("---")
 
-# 채팅 인터페이스
 if st.session_state.get('client_init_success', False) and st.session_state.openai_client:
     st.subheader('💬 AI 친구와 더 이야기하기')
 
-    # 채팅 메시지 표시 영역
     chat_display_container = st.container() 
     with chat_display_container:
         for role, message in st.session_state.chat_history:
             if role == "User":
-                # HTML/CSS를 사용한 메시지 표시
                 st.markdown(f'<div class="chat-message user"><div class="message">👤 **나:** {message}</div></div>', unsafe_allow_html=True)
             else: 
                 st.markdown(f'<div class="chat-message bot"><div class="message">🤖 **AI:** {message}</div></div>', unsafe_allow_html=True)
 
-    # 채팅 입력 처리 함수
     def handle_chat_submit():
         user_message = st.session_state.get("chat_input_text", "")
-        if user_message.strip(): # 공백만 있는 메시지 방지
+        if user_message.strip():
             st.session_state.chat_history.append(("User", user_message))
-            # AI 응답 생성 중 스피너 표시 (선택 사항)
             with st.spinner("AI가 답변을 생각하고 있어요... 🤔"):
                 ai_response = chat_with_ai(st.session_state.chat_history) 
             
             if ai_response:
                 st.session_state.chat_history.append(("AI", ai_response))
-            else:
-                # AI 응답 실패 시 사용자에게 알림 (chat_with_ai 함수 내에서 st.error로 이미 처리될 수 있음)
-                # st.warning("AI 응답을 받지 못했습니다. 다시 시도해주세요.")
-                pass # chat_with_ai 내부에서 오류 메시지 표시
-            st.session_state.chat_input_text = "" # 입력 필드 초기화
-        else:
-            # 빈 메시지 입력 시 경고 (선택 사항)
-            # st.toast("메시지를 입력해주세요.", icon="✍️") 
-            pass
-
-
-    # 채팅 입력 필드
-    # 사용자가 Enter를 누르거나 포커스를 잃을 때 on_change가 호출될 수 있습니다.
-    # 버튼을 사용하거나, st.chat_input을 사용하는 것을 고려할 수 있습니다.
-    # 현재 코드는 on_change를 사용합니다.
-    # 파일 인코딩 문제 (U+FFFD)는 이 부분의 코드를 직접 타이핑하거나,
-    # 파일 전체가 UTF-8로 올바르게 저장되었는지 확인하는 것이 중요합니다.
+            # 입력 필드 초기화는 입력 위젯 자체에서 st.empty() 등을 사용하거나,
+            # st.rerun()을 통해 전체 UI를 다시 그리면서 자연스럽게 초기화될 수 있습니다.
+            # 여기서는 on_change 콜백 후 자동으로 입력창이 비워지도록 key를 사용한 text_input의 기본 동작에 의존합니다.
+            # 명시적으로 비우려면 st.session_state.chat_input_text = "" 를 콜백 끝에 추가할 수 있습니다.
+            # 단, on_change 콜백 내에서 session_state를 직접 변경하고 바로 UI에 반영되길 기대하는 것은
+            # Streamlit의 실행 흐름상 주의가 필요합니다. st.rerun()이 더 확실한 방법일 수 있습니다.
+            st.session_state.chat_input_text = "" # 입력 필드 명시적 초기화
+    
     st.text_input(
         "AI에게 메시지를 보내보세요:", 
         key="chat_input_text", 
-        on_change=handle_chat_submit, # Enter 키 입력 시 콜백 실행
+        on_change=handle_chat_submit,
         placeholder="하고 싶은 말을 자유롭게 적고 Enter를 누르세요..."
     )
-    
-    # 만약 Enter 키 대신 버튼으로 전송하고 싶다면:
-    # user_input_for_button = st.text_input("AI에게 메시지를 보내보세요:", key="chat_input_for_button_key", placeholder="하고 싶은 말을 자유롭게 적으세요...")
-    # if st.button("전송", key="send_chat_button"):
-    #    if user_input_for_button.strip():
-    #        st.session_state.chat_history.append(("User", user_input_for_button))
-    #        # ... (ai 응답 로직) ...
-    #        st.rerun() # UI 즉시 업데이트
-
 else:
-    # API 키가 설정되지 않았지만, 이전에 분석 결과가 있는 경우 안내
-    if st.session_state.emotion_score is not None: 
+    if st.session_state.emotion_score is not None: # 분석은 성공했으나, 이후 API 키가 제거되거나 초기화 실패한 경우
         st.info("AI와 대화를 계속하려면 사이드바에서 유효한 OpenAI API 키를 설정하고 클라이언트 초기화를 완료해주세요.")
 
-# 페이지 하단 여백
 st.markdown("<br><br>", unsafe_allow_html=True)
-
-# 디버깅을 위한 추가 정보 (선택 사항):
-# st.write("Current session state:", st.session_state)
