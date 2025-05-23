@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# 위 라인은 파일 최상단에 추가하여 UTF-8 인코딩을 명시하는 것이 좋습니다.
+# 또는, 파일을 저장할 때 반드시 UTF-8 인코딩으로 저장해주세요.
+
 import streamlit as st
 import altair as alt
 import pandas as pd
@@ -92,17 +96,9 @@ with st.sidebar:
                 # 2. 프록시 설정: 만약 회사 네트워크 등 프록시 환경에 있다면, 시스템 환경변수(HTTP_PROXY, HTTPS_PROXY) 설정이
                 #    영향을 줄 수 있습니다. 아래 `custom_http_client` 설정을 통해 프록시를 명시적으로 제어할 수 있습니다.
 
-                # 옵션 1: 표준 httpx 클라이언트 사용 (시스템 프록시 자동 감지)
-                # custom_http_client = httpx.Client()
-
                 # 옵션 2: 프록시 사용 안 함 (시스템 프록시 무시) - 프록시 관련 문제 발생 시 시도
                 custom_http_client = httpx.Client(proxies=None)
                 
-                # 옵션 3: 특정 프록시 명시적 설정
-                # proxies = {"http://": "http://your-proxy-url:port", "https://": "https://your-proxy-url:port"}
-                # custom_http_client = httpx.Client(proxies=proxies)
-
-                # 전역 client 변수에 할당
                 globals()['client'] = OpenAI(
                     api_key=final_api_key,
                     http_client=custom_http_client # 명시적으로 http_client 전달
@@ -121,21 +117,21 @@ with st.sidebar:
                                       "3. 그래도 문제가 지속되면 시스템 환경 변수(HTTP_PROXY, HTTPS_PROXY) 설정을 점검해주세요.")
                 st.sidebar.error(error_message)
                 globals()['client'] = None
-                st.session_state.current_client_api_key = None # 실패 시 현재 키 정보도 초기화
+                st.session_state.current_client_api_key = None 
                 st.session_state.client_init_success = False
             except Exception as e:
                 st.sidebar.error(f"OpenAI 클라이언트 초기화 중 예상치 못한 오류 발생: {e}")
                 globals()['client'] = None
-                st.session_state.current_client_api_key = None # 실패 시 현재 키 정보도 초기화
+                st.session_state.current_client_api_key = None 
                 st.session_state.client_init_success = False
-        elif st.session_state.client_init_success: # 이미 성공적으로 초기화된 경우
+        elif st.session_state.client_init_success: 
              st.sidebar.info("OpenAI 클라이언트가 이미 초기화되어 있습니다.")
 
 
-    else: # API 키가 없는 경우
-        if st.session_state.client_init_success: # 이전에 성공했으나 키가 제거된 경우
+    else: 
+        if st.session_state.client_init_success: 
             st.sidebar.info("API 키가 제거되어 OpenAI 클라이언트가 비활성화되었습니다.")
-        globals()['client'] = None # client를 None으로 설정
+        globals()['client'] = None 
         st.session_state.current_client_api_key = None
         st.session_state.client_init_success = False
 
@@ -155,13 +151,11 @@ if 'emotion_score' not in st.session_state:
 # --- 핵심 기능 함수 ---
 def analyze_diary(content):
     """일기 내용을 분석하여 감정 점수와 피드백을 반환합니다."""
-    # client 변수가 로컬 스코프에 없을 수 있으므로 globals()를 통해 접근
     current_client = globals().get('client')
     if not st.session_state.get('client_init_success', False) or not current_client:
         st.error("AI 기능을 사용하려면 OpenAI API 키를 설정하고 클라이언트가 성공적으로 초기화되어야 합니다.")
         return None, None
     try:
-        # 감정 점수 분석 요청
         score_response = current_client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -198,7 +192,6 @@ def analyze_diary(content):
              st.error(f"감정 점수를 최종적으로 확정할 수 없었습니다. AI 응답: '{emotion_text}'")
              return None, None
 
-        # AI 피드백 생성 요청
         feedback_response = current_client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -222,16 +215,10 @@ def plot_emotion_spectrum(score):
         return None
     df = pd.DataFrame({'x': [0, score], 'y': [0, 0], 'score': [score, score]})
     
-    color_scale = alt.Scale(
-        domain=[0, 3, 7, 10],
-        range=['#F44336', '#FFC107', '#4CAF50', '#4CAF50'] # 마지막 색상 중복으로 경계값 처리
-    )
     color = '#4CAF50' if score > 7 else '#FFC107' if score > 3 else '#F44336'
 
-
     chart = alt.Chart(df).mark_line(
-        # color=alt.Color('score:Q', scale=color_scale, legend=None), # 점수에 따른 색상 변화 시도 (단일 선에는 부적합)
-        color=color, # 단일 색상 사용
+        color=color, 
         strokeWidth=15, 
         opacity=0.8,
         strokeCap='round' 
@@ -288,7 +275,7 @@ def chat_with_ai(message_history):
         return None
 
 # --- UI 구성 ---
-st.title('AI 일기 친구 �📔')
+st.title('AI 일기 친구 🤖📔')
 
 if not st.session_state.get('client_init_success', False):
     st.warning("⚠️ OpenAI API 키가 설정되지 않았거나 클라이언트 초기화에 실패했습니다. 왼쪽 사이드바에서 API 키를 입력하고 초기화를 시도해주세요. 키가 없으면 AI 기능이 작동하지 않습니다.")
@@ -303,7 +290,7 @@ st.markdown("""
 diary_content = st.text_area("오늘의 일기를 자유롭게 써보세요:", height=250, placeholder="여기에 일기를 작성해주세요...")
 
 if st.button("✏️ 일기 분석하기", type="primary"):
-    current_client = globals().get('client') # client 확인
+    current_client = globals().get('client') 
     if not st.session_state.get('client_init_success', False) or not current_client:
         st.error("먼저 사이드바에서 OpenAI API 키를 설정하고 클라이언트 초기화를 성공적으로 완료해주세요.")
     elif not diary_content.strip():
@@ -316,7 +303,6 @@ if st.button("✏️ 일기 분석하기", type="primary"):
             st.session_state.chat_history = [] 
             st.session_state.chat_history.append(("AI", feedback)) 
             st.success("일기 분석 완료! 아래에서 결과를 확인하고 대화를 시작해보세요. 👇")
-        # analyze_diary 내부에서 오류 메시지 처리
 
 if st.session_state.emotion_score is not None:
     st.subheader('📊 나의 감정 분석 결과')
@@ -334,7 +320,7 @@ if st.session_state.emotion_score is not None:
         st.altair_chart(altair_chart, use_container_width=True)
     st.markdown("---")
 
-current_client = globals().get('client') # client 확인
+current_client = globals().get('client') 
 if st.session_state.get('client_init_success', False) and current_client:
     st.subheader('💬 AI 친구와 더 이야기하기')
 
@@ -354,7 +340,10 @@ if st.session_state.get('client_init_success', False) and current_client:
             if ai_response:
                 st.session_state.chat_history.append(("AI", ai_response))
             st.session_state.chat_input_text = "" 
-
+    
+    # SyntaxError: invalid character '' (U+FFFD) 오류가 이 근처에서 발생했다면,
+    # 아래 st.text_input(...) 부분을 직접 다시 타이핑해보거나,
+    # 파일 전체가 UTF-8 인코딩으로 저장되었는지 확인해주세요.
     st.text_input(
         "AI에게 메시지를 보내보세요:", 
         key="chat_input_text", 
@@ -365,5 +354,6 @@ else:
     if st.session_state.emotion_score is not None: 
          st.info("AI와 대화를 계속하려면 사이드바에서 유효한 OpenAI API 키를 설정하고 클라이언트 초기화를 완료해주세요.")
 
+# 파일 끝에 있는 이 라인도 문제가 될 수 있으니, 문제가 지속되면 이 라인도 확인해보세요.
+# 특히 복사/붙여넣기 시 보이지 않는 문자가 포함될 수 있습니다.
 st.markdown("<br><br>", unsafe_allow_html=True)
-�
