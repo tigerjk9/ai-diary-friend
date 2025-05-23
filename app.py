@@ -115,19 +115,6 @@ with st.sidebar:
                 )
                 # ==================================================================
                 
-                # (선택 사항) API 키 유효성 검사를 위한 간단한 API 호출 (예: 모델 목록 가져오기)
-                # 이 부분은 실제 API 호출을 발생시키므로, 비용 및 할당량에 유의해야 합니다.
-                # 초기화 성공 여부는 실제 API 호출 시점에서 확인하는 것이 더 일반적입니다.
-                # try:
-                #     st.session_state.openai_client.models.list() # 간단한 테스트 호출
-                #     st.session_state.client_init_success = True
-                #     st.sidebar.success("OpenAI 클라이언트가 성공적으로 초기화 및 테스트되었습니다! 🎉")
-                # except Exception as api_test_error:
-                #     st.sidebar.error(f"API 키 테스트 실패 또는 클라이언트 초기화 실패: {api_test_error}")
-                #     st.session_state.openai_client = None
-                #     st.session_state.current_client_api_key = None 
-                #     st.session_state.client_init_success = False
-                
                 st.session_state.current_client_api_key = final_api_key
                 st.session_state.client_init_success = True # 우선 성공으로 간주, 실제 API 호출 시 최종 확인
                 st.sidebar.success("OpenAI 클라이언트가 성공적으로 초기화되었습니다! (실제 API 사용 시 유효성 최종 확인)")
@@ -135,7 +122,6 @@ with st.sidebar:
 
             except TypeError as te:
                 error_message = f"OpenAI 클라이언트 초기화 실패 (TypeError): {te}\n"
-                # 오류 메시지에 'proxies' 또는 '__init__' 관련 내용이 포함되어 있는지 확인하여 더 구체적인 안내 제공
                 if "got an unexpected keyword argument 'proxies'" in str(te) or "Client.__init__()" in str(te):
                     error_message += (
                         "**이 오류는 `OpenAI` 라이브러리 버전 또는 `httpx`와의 호환성 문제일 가능성이 높습니다.**\n"
@@ -152,7 +138,7 @@ with st.sidebar:
                 st.session_state.openai_client = None
                 st.session_state.current_client_api_key = None 
                 st.session_state.client_init_success = False
-            except Exception as e: # APIConnectionError, AuthenticationError 등 OpenAI의 다른 특정 오류도 여기서 처리될 수 있음
+            except Exception as e: 
                 st.sidebar.error(f"OpenAI 클라이언트 초기화 중 예상치 못한 오류 발생: {e}")
                 st.session_state.openai_client = None
                 st.session_state.current_client_api_key = None 
@@ -178,9 +164,8 @@ def analyze_diary(content):
     
     current_client = st.session_state.openai_client
     try:
-        # 감정 점수 분석 요청
         score_response = current_client.chat.completions.create(
-            model="gpt-4", # 또는 "gpt-3.5-turbo" 등 사용 가능한 모델
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": "너는 10대 학생들의 일기를 분석하고 감정을 이해하는 AI야. 일기 내용을 바탕으로 감정 점수를 0에서 10 사이의 정수 숫자로만 응답해줘 (예: 7). 다른 설명이나 문장은 절대 포함하지 마."},
                 {"role": "user", "content": f"다음 일기의 감정을 분석하고 감정 점수를 알려줘:\n\n{content}"}
@@ -189,39 +174,34 @@ def analyze_diary(content):
         emotion_text = score_response.choices[0].message.content.strip()
         
         emotion_score = None
-        # 1. 정확히 숫자만 있는지 확인 (예: "7")
         match_strict = re.fullmatch(r'\s*(\d{1,2})\s*', emotion_text)
         if match_strict:
-            score = int(match_strict.group(1))
-            if 0 <= score <= 10:
-                emotion_score = score
+            score_val = int(match_strict.group(1))
+            if 0 <= score_val <= 10:
+                emotion_score = score_val
             else:
-                st.warning(f"AI가 반환한 감정 점수({score})가 유효한 범위(0-10)를 벗어났습니다. AI 응답: '{emotion_text}'")
+                st.warning(f"AI가 반환한 감정 점수({score_val})가 유효한 범위(0-10)를 벗어났습니다. AI 응답: '{emotion_text}'")
         
-        # 2. 만약 위에서 못 찾았으면, 응답에서 숫자 추출 시도 (예: "감정 점수는 7점입니다.")
         if emotion_score is None:
             matches_fallback = re.findall(r'\d+', emotion_text)
             if matches_fallback:
-                # 여러 숫자가 있다면 마지막 숫자를 점수로 가정 (가장 가능성 높은 시나리오)
                 potential_score = int(matches_fallback[-1]) 
                 if 0 <= potential_score <= 10:
                     emotion_score = potential_score
                     st.info(f"AI 응답에서 감정 점수를 '{emotion_score}'(으)로 추출했습니다 (폴백 로직 사용). AI 응답: '{emotion_text}'")
                 else:
                     st.error(f"AI 응답에서 유효한 감정 점수(0-10)를 추출할 수 없습니다 (폴백). AI 응답: '{emotion_text}'")
-                    return None, None # 점수 추출 실패 시 여기서 중단
+                    return None, None
             else:
                 st.error(f"AI 응답에서 감정 점수를 찾을 수 없습니다. AI 응답: '{emotion_text}'")
-                return None, None # 점수 추출 실패 시 여기서 중단
+                return None, None
 
-        # 최종적으로 점수 확정 실패 시
         if emotion_score is None:
             st.error(f"감정 점수를 최종적으로 확정할 수 없었습니다. AI 응답: '{emotion_text}'")
             return None, None
 
-        # 피드백 요청
         feedback_response = current_client.chat.completions.create(
-            model="gpt-4", # 또는 "gpt-3.5-turbo"
+            model="gpt-4", 
             messages=[
                 {"role": "system", "content": "너는 10대 학생들을 위한 에너지 넘치고 친근한 AI 상담사야. 학생들의 감정을 깊이 이해하고 공감하며, 그들의 눈높이에 맞는 쉬운 언어로 대화해. 격식 없는 친근한 말투를 사용하고, 적절한 이모티콘도 활용해. 상담사로서의 전문성을 유지하면서도 학생들이 편하게 대화할 수 있는 분위기를 만들어줘."},
                 {"role": "user", "content": f"내 일기 내용은 다음과 같아. 이 일기에 대해 따뜻하고 친근한 말투로 공감과 격려의 피드백을 해줘:\n\n{content}\n\n(참고: 내 감정 점수는 {emotion_score}/10점이야.)"}
@@ -233,47 +213,85 @@ def analyze_diary(content):
         st.session_state.emotion_score = emotion_score
         return emotion_score, feedback
 
-    except Exception as e: # openai.APIConnectionError, openai.RateLimitError, openai.AuthenticationError 등 처리
+    except Exception as e: 
         st.error(f"일기 분석 중 OpenAI API 호출 오류가 발생했어요: {str(e)}")
         return None, None
 
 def plot_emotion_spectrum(score):
-    """감정 점수를 Altair 스펙트럼 차트로 시각화합니다."""
+    """감정 점수를 Altair 스펙트럼 차트(수평 막대)로 시각화합니다."""
     if score is None:
         return None
     
-    df = pd.DataFrame({'x_start': [0], 'x_end': [score], 'y': [0], 'score': [score]})
+    # 데이터프레임 생성: y축은 점수, x축은 0으로 고정 (수평 막대이므로 y가 값을 나타냄)
+    # 더 명확한 시각화를 위해 전체 스펙트럼 배경과 현재 점수 막대를 분리합니다.
+    
+    # 전체 스펙트럼 배경 (0-10점 회색 막대)
+    source_bg = pd.DataFrame({'category': ['점수'], 'value': [10], 'text_label': ['']}) # 배경용
+    
+    # 현재 점수 데이터
+    source_score = pd.DataFrame({'category': ['점수'], 'value': [score], 'text_label': [str(score)]})
+    
+    # 점수에 따른 색상 결정
     color = '#4CAF50' if score > 7 else '#FFC107' if score > 3 else '#F44336'
 
-    line_chart = alt.Chart(df).mark_rule(
-        color=color, 
-        strokeWidth=15, 
-        opacity=0.8,
-        strokeCap='round' 
+    # 배경 막대 (전체 범위)
+    background_bar = alt.Chart(source_bg).mark_bar(
+        color='lightgray', # 배경색
+        opacity=0.5,
+        cornerRadius=5 # 모서리 둥글게
     ).encode(
-        x=alt.X('x_start:Q', scale=alt.Scale(domain=[0, 10]), axis=alt.Axis(title='감정 점수 (0-10)', values=list(range(11)), labelAngle=0, grid=False), title=""),
-        x2='x_end:Q',
-        y=alt.Y('y:Q', axis=None),
-        tooltip=[alt.Tooltip('score:Q', title='현재 점수')]
-    ).properties(
-        width='container', 
-        height=50, 
-        title=alt.TitleParams(text='나의 감정 스펙트럼', anchor='middle', fontSize=16, dy=-10)
+        x=alt.X('value:Q', 
+                scale=alt.Scale(domain=[0, 10]), 
+                axis=alt.Axis(title='감정 점수', values=list(range(11)), labelAngle=0, grid=True),
+                title="감정 점수 (0-10)"
+               ),
+        y=alt.Y('category:N', axis=None, title="") # y축 라벨 숨김
+    )
+
+    # 현재 점수 막대
+    score_bar = alt.Chart(source_score).mark_bar(
+        color=color,
+        opacity=0.9,
+        cornerRadius=5 # 모서리 둥글게
+    ).encode(
+        x='value:Q', # x축에 현재 점수 값
+        y='category:N' # y축은 동일한 카테고리
     )
     
-    text_mark = alt.Chart(pd.DataFrame({'x': [score], 'y': [0], 'text': [f'{score}']})).mark_text(
-        align='center',
-        baseline='middle', 
-        dy=-25, 
-        fontSize=18, 
+    # 점수 텍스트 (막대 위에 표시)
+    score_text = alt.Chart(source_score).mark_text(
+        align='left', # 텍스트를 막대 오른쪽에 표시하기 위해 left 정렬
+        baseline='middle',
+        dx=7, # 막대 오른쪽으로 약간 이동
+        fontSize=16,
         fontWeight='bold',
-        color=color
+        color=color 
     ).encode(
-        x='x:Q',
-        y='y:Q',
-        text='text:N'
+        x='value:Q', # x 위치는 점수 값
+        y='category:N', # y 위치는 카테고리
+        text='text_label:N' # 표시할 텍스트
     )
-    return line_chart + text_mark
+
+    # 차트 레이어링: 배경 -> 점수 막대 -> 점수 텍스트
+    # 너비와 높이 설정
+    # title 파라미터는 mark_* 가 아닌 Chart() 에 직접 적용
+    chart = alt.layer(
+        background_bar, 
+        score_bar, 
+        score_text
+    ).properties(
+        title=alt.TitleParams(
+            text='나의 감정 스펙트럼', 
+            anchor='middle', 
+            fontSize=18,
+            dy=-15 # 제목 위치 조정
+        ),
+        height=alt.Step(40) # 막대의 높이 (카테고리별 간격)
+    ).configure_view(
+        strokeWidth=0 # 차트 전체 테두리 제거
+    )
+    
+    return chart
 
 
 def get_emotion_circle(score):
@@ -300,16 +318,16 @@ def chat_with_ai(message_history):
             messages=formatted_messages
         )
         return response.choices[0].message.content.strip()
-    except Exception as e: # openai.APIConnectionError, openai.RateLimitError, openai.AuthenticationError 등 처리
+    except Exception as e: 
         st.error(f"채팅 중 OpenAI API 호출 오류가 발생했어요: {str(e)}")
         return None
 
 # --- UI 구성 ---
 st.title('AI 일기 친구 🤖📔')
 
-if not st.session_state.get('client_init_success', False) and not final_api_key: # API 키가 아예 입력되지 않은 경우
+if not st.session_state.get('client_init_success', False) and not final_api_key: 
     st.warning("⚠️ OpenAI API 키를 설정해주세요. 왼쪽 사이드바에서 API 키를 입력하고 초기화를 시도해주세요. 키가 없으면 AI 기능이 작동하지 않습니다.")
-elif not st.session_state.get('client_init_success', False) and final_api_key: # API 키는 입력되었으나 초기화 실패한 경우
+elif not st.session_state.get('client_init_success', False) and final_api_key: 
     st.error("⚠️ OpenAI 클라이언트 초기화에 실패했습니다. 입력하신 API 키가 유효한지, 네트워크 연결에 문제가 없는지 확인해주세요. 사이드바의 오류 메시지를 참고하세요.")
 
 
@@ -372,13 +390,7 @@ if st.session_state.get('client_init_success', False) and st.session_state.opena
             
             if ai_response:
                 st.session_state.chat_history.append(("AI", ai_response))
-            # 입력 필드 초기화는 입력 위젯 자체에서 st.empty() 등을 사용하거나,
-            # st.rerun()을 통해 전체 UI를 다시 그리면서 자연스럽게 초기화될 수 있습니다.
-            # 여기서는 on_change 콜백 후 자동으로 입력창이 비워지도록 key를 사용한 text_input의 기본 동작에 의존합니다.
-            # 명시적으로 비우려면 st.session_state.chat_input_text = "" 를 콜백 끝에 추가할 수 있습니다.
-            # 단, on_change 콜백 내에서 session_state를 직접 변경하고 바로 UI에 반영되길 기대하는 것은
-            # Streamlit의 실행 흐름상 주의가 필요합니다. st.rerun()이 더 확실한 방법일 수 있습니다.
-            st.session_state.chat_input_text = "" # 입력 필드 명시적 초기화
+            st.session_state.chat_input_text = "" 
     
     st.text_input(
         "AI에게 메시지를 보내보세요:", 
@@ -387,7 +399,7 @@ if st.session_state.get('client_init_success', False) and st.session_state.opena
         placeholder="하고 싶은 말을 자유롭게 적고 Enter를 누르세요..."
     )
 else:
-    if st.session_state.emotion_score is not None: # 분석은 성공했으나, 이후 API 키가 제거되거나 초기화 실패한 경우
+    if st.session_state.emotion_score is not None: 
         st.info("AI와 대화를 계속하려면 사이드바에서 유효한 OpenAI API 키를 설정하고 클라이언트 초기화를 완료해주세요.")
 
 st.markdown("<br><br>", unsafe_allow_html=True)
